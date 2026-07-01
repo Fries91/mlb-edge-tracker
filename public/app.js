@@ -370,6 +370,97 @@ function actualOrProjectedScore(game, side, pred) {
   return "--";
 }
 
+function finiteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function combinedEdge(values) {
+  const usable = values
+    .map(value => finiteNumber(value))
+    .filter(value => value !== null);
+
+  if (!usable.length) return null;
+
+  return usable.reduce((sum, value) => sum + value, 0);
+}
+
+function edgeWinner(value, game) {
+  const n = Number(value || 0);
+
+  if (Math.abs(n) < 0.03) return "Close";
+
+  return n > 0 ? game.homeTeamName : game.awayTeamName;
+}
+
+function edgeValue(value) {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) return "--";
+
+  const sign = n > 0 ? "+" : "";
+
+  return `${sign}${number(n, 3)}`;
+}
+
+function breakdownLine(label, value, game, pred) {
+  const n = finiteNumber(value);
+
+  if (n === null) {
+    return `
+      <div class="breakdownLine warn">
+        <span>${escapeHtml(label)}</span>
+        <strong>Not enough data</strong>
+      </div>
+    `;
+  }
+
+  const winner = edgeWinner(n, game);
+  const picked = pred?.predictedWinnerName || "";
+  let className = "warn";
+
+  if (winner !== "Close" && picked && winner === picked) {
+    className = "good";
+  } else if (winner !== "Close" && picked && winner !== picked) {
+    className = "bad";
+  }
+
+  return `
+    <div class="breakdownLine ${className}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(winner)} ${escapeHtml(edgeValue(n))}</strong>
+    </div>
+  `;
+}
+
+function confidenceBreakdown(game, pred) {
+  if (!pred) return "";
+
+  const f = pred.features || {};
+  const pitcherEdge = combinedEdge([
+    f.pitcherEra,
+    f.pitcherWhip,
+    f.pitcherStrikeouts
+  ]);
+
+  return `
+    <details class="confidenceDetails">
+      <summary>Confidence Breakdown</summary>
+
+      <div class="confidenceBreakdown">
+        ${breakdownLine("Win % Edge", f.winPct, game, pred)}
+        ${breakdownLine("Home/Away Edge", f.homeAway, game, pred)}
+        ${breakdownLine("Scoring Edge", f.rpg, game, pred)}
+        ${breakdownLine("Run Prevention Edge", f.rapg, game, pred)}
+        ${breakdownLine("Run Differential Edge", f.runDiff, game, pred)}
+        ${breakdownLine("Pitcher Edge", pitcherEdge, game, pred)}
+        ${breakdownLine("Recent Form Edge", f.recentForm, game, pred)}
+        ${breakdownLine("Head-to-Head Edge", f.h2h, game, pred)}
+      </div>
+    </details>
+  `;
+}
+
 function edgeClass(text) {
   const t = String(text || "").toLowerCase();
 
@@ -502,29 +593,13 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
                 <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
               `).join("")}
             </div>
+
+            ${confidenceBreakdown(game, pred)}
           </div>
         </div>
       </article>
     `;
   }).join("");
-}
-
-function edgeWinner(value, game) {
-  const n = Number(value || 0);
-
-  if (Math.abs(n) < 0.03) return "Close";
-
-  return n > 0 ? game.homeTeamName : game.awayTeamName;
-}
-
-function edgeValue(value) {
-  const n = Number(value);
-
-  if (!Number.isFinite(n)) return "--";
-
-  const sign = n > 0 ? "+" : "";
-
-  return `${sign}${number(n, 3)}`;
 }
 
 function renderMatchups() {
@@ -594,6 +669,8 @@ function renderMatchups() {
             <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
           `).join("")}
         </div>
+
+        ${confidenceBreakdown(game, pred)}
       </article>
     `;
   }).join("");
@@ -679,6 +756,8 @@ function renderAutoSources() {
             `).join("")}
           </div>
         ` : ""}
+
+        ${confidenceBreakdown(game, pred)}
 
         <p>
           Auto inputs used: schedule, team record, home/away split, runs scored,
