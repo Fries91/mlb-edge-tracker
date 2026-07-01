@@ -1,5 +1,10 @@
 let state = null;
 let bestFilter = "all";
+let lastSyncAt = null;
+let nextAutoSyncAt = null;
+let currentRefreshStatus = "Ready";
+
+const FRONTEND_SYNC_MS = 15 * 60 * 1000;
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
@@ -30,17 +35,21 @@ function percent(value) {
   return `${Math.round(n * 1000) / 10}%`;
 }
 
-function shortTime(dateValue) {
-  if (!dateValue) return "--";
+function formatClock(value) {
+  if (!value) return "--";
 
   try {
-    return new Date(dateValue).toLocaleTimeString([], {
+    return new Date(value).toLocaleTimeString([], {
       hour: "numeric",
       minute: "2-digit"
     });
   } catch {
     return "--";
   }
+}
+
+function shortTime(dateValue) {
+  return formatClock(dateValue);
 }
 
 function prettyDate(dateValue) {
@@ -63,6 +72,8 @@ function isFinalStatus(status) {
 }
 
 function setStatus(text, mode = "ready") {
+  currentRefreshStatus = text;
+
   const statusText = $("#statusText");
   const dot = $("#statusDot");
 
@@ -74,6 +85,8 @@ function setStatus(text, mode = "ready") {
     if (mode === "working") dot.classList.add("working");
     if (mode === "error") dot.classList.add("error");
   }
+
+  renderRefreshStatus();
 }
 
 function pickStrength(confidence) {
@@ -155,6 +168,9 @@ async function load(sync = false) {
       : await getJson("/api/dashboard");
 
     state = data.dashboard || data;
+
+    lastSyncAt = new Date();
+    nextAutoSyncAt = new Date(Date.now() + FRONTEND_SYNC_MS);
 
     render();
 
@@ -246,6 +262,7 @@ function render() {
   setText("#bestFilterNote", `${bestFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`);
 
   renderDailySummary();
+  renderRefreshStatus();
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
   renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
@@ -292,6 +309,15 @@ function renderDailySummary() {
   setText("#summaryLocked", lockedCount);
   setText("#summaryPending", pendingCount);
   setText("#summaryAccuracy", accuracy == null ? "--" : `${accuracy}%`);
+}
+
+function renderRefreshStatus() {
+  setText("#refreshLastSync", lastSyncAt ? formatClock(lastSyncAt) : "--");
+  setText("#refreshNextSync", nextAutoSyncAt ? formatClock(nextAutoSyncAt) : "--");
+  setText("#refreshFrontend", "15 min");
+  setText("#refreshBackend", "Hourly");
+  setText("#refreshStorage", state ? "Saved DB active" : "Checking");
+  setText("#refreshStatus", currentRefreshStatus || "Ready");
 }
 
 function pitcherText(pitcher) {
@@ -759,9 +785,10 @@ if (syncBtn) {
 
 setupTabs();
 setupBestFilters();
+renderRefreshStatus();
 
 load(true);
 
 setInterval(() => {
   load(true);
-}, 15 * 60 * 1000);
+}, FRONTEND_SYNC_MS);
