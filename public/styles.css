@@ -753,6 +753,44 @@ tr:last-child td {
   color: var(--gold);
 }
 
+.bestFilterBar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 10px;
+  margin-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.bestFilterBar::-webkit-scrollbar {
+  display: none;
+}
+
+.filterBtn {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--soft);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.filterBtn.active {
+  color: #101820;
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  border-color: rgba(255, 209, 92, 0.8);
+  box-shadow: 0 12px 26px rgba(255, 184, 77, 0.16);
+}
+
+.filterNote {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 @media (max-width: 920px) {
   .quickStats {
     grid-template-columns: repeat(3, 1fr);
