@@ -317,8 +317,13 @@ async function syncSchedule(db, dateStr, options = {}) {
       const awayTeam = g.teams?.away?.team || {};
       const homeTeam = g.teams?.home?.team || {};
 
-      const awayPitcher = await pitcherStats(db, g.teams?.away?.probablePitcher, year);
-      const homePitcher = await pitcherStats(db, g.teams?.home?.probablePitcher, year);
+      let awayPitcher = db.games[gamePk]?.awayPitcher || null;
+      let homePitcher = db.games[gamePk]?.homePitcher || null;
+
+      if (shouldPredict) {
+        awayPitcher = await pitcherStats(db, g.teams?.away?.probablePitcher, year);
+        homePitcher = await pitcherStats(db, g.teams?.home?.probablePitcher, year);
+      }
 
       db.teams[String(awayTeam.id)] = db.teams[String(awayTeam.id)] || {
         id: String(awayTeam.id),
@@ -375,6 +380,31 @@ async function syncRecentResults(db, dateStr, daysBack = 21) {
 function isFinalGame(game) {
   const status = String(game?.status || "").toLowerCase();
   return status.includes("final") || status.includes("completed");
+}
+
+function hasGameStarted(game) {
+  if (!game) return false;
+
+  const status = String(game.status || "").toLowerCase();
+
+  if (isFinalGame(game)) return true;
+  if (status.includes("in progress")) return true;
+  if (status.includes("game over")) return true;
+  if (status.includes("live")) return true;
+  if (status.includes("warmup")) return true;
+  if (status.includes("suspended")) return true;
+
+  if (status.includes("postponed") || status.includes("cancelled") || status.includes("canceled")) {
+    return false;
+  }
+
+  const start = Date.parse(game.gameDate);
+
+  if (Number.isFinite(start) && Date.now() >= start) {
+    return true;
+  }
+
+  return false;
 }
 
 function gameWinnerId(game) {
@@ -633,68 +663,13 @@ function autoSourceReferences(db, f, game) {
     });
   }
 
-  add(
-    "winPct",
-    "Win percentage edge",
-    factorEdgeName(f.winPct, game),
-    f.winPct,
-    "Calculated from official season record.",
-    92
-  );
-
-  add(
-    "homeAway",
-    "Home / road split edge",
-    factorEdgeName(f.homeAway, game),
-    f.homeAway,
-    "Calculated from official home and away records.",
-    86
-  );
-
-  add(
-    "scoring",
-    "Runs per game edge",
-    factorEdgeName(f.rpg, game),
-    f.rpg,
-    "Calculated from official runs scored per game.",
-    84
-  );
-
-  add(
-    "prevention",
-    "Run prevention edge",
-    factorEdgeName(f.rapg, game),
-    f.rapg,
-    "Calculated from official runs allowed per game.",
-    84
-  );
-
-  add(
-    "pitcher",
-    "Probable starter edge",
-    factorEdgeName(f.pitcherEra + f.pitcherWhip + f.pitcherStrikeouts, game),
-    f.pitcherEra + f.pitcherWhip + f.pitcherStrikeouts,
-    "Calculated from probable starter ERA, WHIP, and strikeouts when available.",
-    76
-  );
-
-  add(
-    "recentForm",
-    "Recent form edge",
-    factorEdgeName(f.recentForm, game),
-    f.recentForm,
-    `${game.homeTeamName}: ${homeForm.label}. ${game.awayTeamName}: ${awayForm.label}.`,
-    homeForm.games && awayForm.games ? 78 : 55
-  );
-
-  add(
-    "h2h",
-    "Head-to-head edge",
-    factorEdgeName(f.h2h, game),
-    f.h2h,
-    h2h.label,
-    h2h.games ? 72 : 45
-  );
+  add("winPct", "Win percentage edge", factorEdgeName(f.winPct, game), f.winPct, "Calculated from official season record.", 92);
+  add("homeAway", "Home / road split edge", factorEdgeName(f.homeAway, game), f.homeAway, "Calculated from official home and away records.", 86);
+  add("scoring", "Runs per game edge", factorEdgeName(f.rpg, game), f.rpg, "Calculated from official runs scored per game.", 84);
+  add("prevention", "Run prevention edge", factorEdgeName(f.rapg, game), f.rapg, "Calculated from official runs allowed per game.", 84);
+  add("pitcher", "Probable starter edge", factorEdgeName(f.pitcherEra + f.pitcherWhip + f.pitcherStrikeouts, game), f.pitcherEra + f.pitcherWhip + f.pitcherStrikeouts, "Calculated from probable starter ERA, WHIP, and strikeouts when available.", 76);
+  add("recentForm", "Recent form edge", factorEdgeName(f.recentForm, game), f.recentForm, `${game.homeTeamName}: ${homeForm.label}. ${game.awayTeamName}: ${awayForm.label}.`, homeForm.games && awayForm.games ? 78 : 55);
+  add("h2h", "Head-to-head edge", factorEdgeName(f.h2h, game), f.h2h, h2h.label, h2h.games ? 72 : 45);
 
   return list.sort((a, b) => Math.abs(b.weightedImpact) - Math.abs(a.weightedImpact));
 }
@@ -706,23 +681,36 @@ function hashPrediction(f, refs, game) {
       f,
       refs: refs.map(r => ({ id: r.id, impact: r.weightedImpact })),
       hp: game.homePitcher?.id,
-      ap: game.awayPitcher?.id,
-      hs: game.homeScore,
-      as: game.awayScore
+      ap: game.awayPitcher?.id
     }))
     .digest("hex");
 }
 
 function makePrediction(db, game) {
+  const existing = db.predictions[game.gamePk];
+
+  if (existing && existing.locked) {
+    return existing;
+  }
+
+  if (existing && hasGameStarted(game)) {
+    existing.locked = true;
+    existing.lockedAt = existing.lockedAt || new Date().toISOString();
+    existing.lockedStatus = game.status || "Started";
+    existing.lockReason = "Locked because the game started.";
+    addLog(db, `Locked prediction: ${game.awayTeamName} @ ${game.homeTeamName}`);
+    return existing;
+  }
+
   const f = features(db, game);
 
   if (!f) return null;
 
+  const startedAtCreation = hasGameStarted(game);
   const prob = homeWinProb(db, f);
   const projected = scoreProjection(db, game, prob);
   const refs = autoSourceReferences(db, f, game);
   const predHash = hashPrediction(f, refs, game);
-  const existing = db.predictions[game.gamePk];
 
   const pred = {
     gamePk: game.gamePk,
@@ -741,6 +729,11 @@ function makePrediction(db, game) {
     reasons: reasons(db, f, game),
     sourceReferences: refs,
     featureHash: predHash,
+    locked: startedAtCreation,
+    lockedAt: startedAtCreation ? new Date().toISOString() : null,
+    lockedStatus: startedAtCreation ? game.status || "Started" : null,
+    lockReason: startedAtCreation ? "Created and locked after game start." : "Open until game starts.",
+    lateCreated: startedAtCreation && !existing,
     createdAt: existing?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     result: existing?.result || null,
@@ -793,6 +786,7 @@ function gradeIfFinal(db, game) {
   if (!actualWinnerTeamId) return;
 
   const correct = String(actualWinnerTeamId) === String(pred.predictedWinnerTeamId);
+  const counted = !pred.lateCreated;
 
   pred.result = {
     actualWinnerTeamId,
@@ -802,11 +796,16 @@ function gradeIfFinal(db, game) {
     awayScore: game.awayScore,
     homeScore: game.homeScore,
     correct,
+    counted,
     gradedAt: new Date().toISOString()
   };
 
-  train(db, pred.features, String(actualWinnerTeamId) === String(game.homeTeamId) ? 1 : 0);
-  addLog(db, `Graded ${game.awayTeamName} @ ${game.homeTeamName}: ${correct ? "correct" : "wrong"}`);
+  if (counted) {
+    train(db, pred.features, String(actualWinnerTeamId) === String(game.homeTeamId) ? 1 : 0);
+    addLog(db, `Graded ${game.awayTeamName} @ ${game.homeTeamName}: ${correct ? "correct" : "wrong"}`);
+  } else {
+    addLog(db, `Graded late-created prediction, not counted: ${game.awayTeamName} @ ${game.homeTeamName}`);
+  }
 }
 
 async function syncPredictionDate(db, dateStr) {
@@ -822,12 +821,14 @@ async function fullAutoSync(db, dateStr) {
 }
 
 function accuracy(db) {
-  const graded = Object.values(db.predictions || {}).filter(p => p.result);
+  const graded = Object.values(db.predictions || {}).filter(p => p.result && p.result.counted !== false);
   const correct = graded.filter(p => p.result.correct).length;
+  const excluded = Object.values(db.predictions || {}).filter(p => p.result && p.result.counted === false).length;
 
   return {
     totalGraded: graded.length,
     correct,
+    excluded,
     accuracy: graded.length ? Math.round((correct / graded.length) * 1000) / 10 : null
   };
 }
@@ -983,8 +984,9 @@ async function router(req, res) {
 
     const safePath = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");
     const filePath = path.normalize(path.join(PUBLIC_DIR, safePath));
+    const relative = path.relative(PUBLIC_DIR, filePath);
 
-    if (!filePath.startsWith(PUBLIC_DIR)) {
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
       res.writeHead(403);
       return res.end("Forbidden");
     }
