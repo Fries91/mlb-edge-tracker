@@ -1,5 +1,6 @@
 let state = null;
 let bestFilter = "all";
+let qualityFilter = "all";
 let lastSyncAt = null;
 let nextAutoSyncAt = null;
 let currentRefreshStatus = "Ready";
@@ -139,10 +140,18 @@ function bestFilterMinimum() {
 }
 
 function bestFilterLabel() {
-  if (bestFilter === "strong") return "Showing 🔥 Strong Edge picks only, 68%+ confidence.";
-  if (bestFilter === "good") return "Showing ✅ Good Edge+ picks, 60%+ confidence.";
-  if (bestFilter === "lean") return "Showing ⚠️ Lean+ picks, 54%+ confidence.";
-  return "Showing all open picks before game start.";
+  if (bestFilter === "strong") return "Confidence: 🔥 Strong Edge only, 68%+.";
+  if (bestFilter === "good") return "Confidence: ✅ Good Edge+, 60%+.";
+  if (bestFilter === "lean") return "Confidence: ⚠️ Lean+, 54%+.";
+  return "Confidence: All.";
+}
+
+function qualityFilterLabel() {
+  if (qualityFilter === "elite") return "Quality: 🏆 Elite only.";
+  if (qualityFilter === "strong") return "Quality: 🔥 Strong+.";
+  if (qualityFilter === "good") return "Quality: ✅ Good+.";
+  if (qualityFilter === "lean") return "Quality: ⚠️ Lean+.";
+  return "Quality: All.";
 }
 
 async function getJson(url) {
@@ -198,11 +207,22 @@ function setupTabs() {
 }
 
 function setupBestFilters() {
-  $$(".filterBtn").forEach(button => {
+  $$("#confidenceFilters .filterBtn").forEach(button => {
     button.addEventListener("click", () => {
       bestFilter = button.dataset.filter || "all";
 
-      $$(".filterBtn").forEach(b => b.classList.remove("active"));
+      $$("#confidenceFilters .filterBtn").forEach(b => b.classList.remove("active"));
+      button.classList.add("active");
+
+      render();
+    });
+  });
+
+  $$("#qualityFilters .filterBtn").forEach(button => {
+    button.addEventListener("click", () => {
+      qualityFilter = button.dataset.quality || "all";
+
+      $$("#qualityFilters .filterBtn").forEach(b => b.classList.remove("active"));
       button.classList.add("active");
 
       render();
@@ -232,12 +252,38 @@ function openBestBoardGames() {
     });
 }
 
+function qualityRank(key) {
+  const ranks = {
+    elite: 5,
+    strong: 4,
+    good: 3,
+    lean: 2,
+    risky: 1
+  };
+
+  return ranks[key] || 0;
+}
+
+function passesQualityFilter(game) {
+  if (qualityFilter === "all") return true;
+
+  const quality = pickQualityData(game, game.prediction);
+  const rank = qualityRank(quality.key);
+
+  if (qualityFilter === "elite") return quality.key === "elite";
+  if (qualityFilter === "strong") return rank >= qualityRank("strong");
+  if (qualityFilter === "good") return rank >= qualityRank("good");
+  if (qualityFilter === "lean") return rank >= qualityRank("lean");
+
+  return true;
+}
+
 function filteredBestBoardGames() {
   const min = bestFilterMinimum();
 
-  return openBestBoardGames().filter(game => {
-    return Number(game.prediction?.confidence || 0) >= min;
-  });
+  return openBestBoardGames()
+    .filter(game => Number(game.prediction?.confidence || 0) >= min)
+    .filter(game => passesQualityFilter(game));
 }
 
 function render() {
@@ -259,7 +305,7 @@ function render() {
 
   setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
-  setText("#bestFilterNote", `${bestFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`);
+  setText("#bestFilterNote", `${bestFilterLabel()} ${qualityFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`);
 
   renderDailySummary();
   renderRefreshStatus();
@@ -473,6 +519,7 @@ function strengthSummaryData(game, pred) {
 function pickQualityData(game, pred) {
   if (!pred) {
     return {
+      key: "risky",
       label: "Calculating",
       detail: "Waiting for enough automatic data.",
       className: "qualityRisky"
@@ -484,6 +531,7 @@ function pickQualityData(game, pred) {
 
   if (confidence >= 72 && summary.score >= 5 && summary.against <= 1) {
     return {
+      key: "elite",
       label: "🏆 Elite Edge",
       detail: "High confidence with most matchup edges supporting the pick.",
       className: "qualityElite"
@@ -492,6 +540,7 @@ function pickQualityData(game, pred) {
 
   if (confidence >= 68 && summary.score >= 3) {
     return {
+      key: "strong",
       label: "🔥 Strong Edge",
       detail: "Strong confidence with a clear edge advantage.",
       className: "qualityStrong"
@@ -500,6 +549,7 @@ function pickQualityData(game, pred) {
 
   if (confidence >= 60 && summary.score >= 2) {
     return {
+      key: "good",
       label: "✅ Good Edge",
       detail: "Good confidence with more edges supporting than against.",
       className: "qualityGood"
@@ -508,6 +558,7 @@ function pickQualityData(game, pred) {
 
   if (confidence >= 54 && summary.score >= 0) {
     return {
+      key: "lean",
       label: "⚠️ Lean",
       detail: "Small edge. Useful to watch, but not a dominant matchup.",
       className: "qualityLean"
@@ -515,6 +566,7 @@ function pickQualityData(game, pred) {
   }
 
   return {
+    key: "risky",
     label: "🧊 Risky / Toss Up",
     detail: "Low edge separation or too many close/unknown factors.",
     className: "qualityRisky"
