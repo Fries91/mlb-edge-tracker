@@ -26,10 +26,10 @@
   <main class="appShell">
     <section class="heroPanel">
       <div>
-        <h2>Today’s MLB Edge Board</h2>
+        <h2>Automatic MLB Edge Board</h2>
         <p>
-          The app automatically checks teams, pitchers, records, scoring trends,
-          head-to-head history, results, and model learning.
+          The app checks teams, pitchers, records, scoring trends, recent form,
+          head-to-head history, final results, and model learning automatically.
         </p>
       </div>
 
@@ -56,6 +56,11 @@
       </div>
 
       <div class="statCard">
+        <span>Best Pick</span>
+        <strong id="topConfidence">--</strong>
+      </div>
+
+      <div class="statCard">
         <span>Accuracy</span>
         <strong id="accuracy">--</strong>
       </div>
@@ -64,15 +69,11 @@
         <span>Model Games</span>
         <strong id="trainedGames">0</strong>
       </div>
-
-      <div class="statCard">
-        <span>Last Sync</span>
-        <strong id="lastSync">--</strong>
-      </div>
     </section>
 
     <nav class="tabs">
-      <button class="tab active" data-tab="today">Today</button>
+      <button class="tab active" data-tab="best">Best Board</button>
+      <button class="tab" data-tab="today">Today</button>
       <button class="tab" data-tab="tomorrow">Tomorrow</button>
       <button class="tab" data-tab="matchups">Matchups</button>
       <button class="tab" data-tab="teams">Teams</button>
@@ -81,7 +82,21 @@
       <button class="tab" data-tab="model">Model</button>
     </nav>
 
-    <section class="panel tabPanel" id="panel-today">
+    <section class="panel tabPanel" id="panel-best">
+      <div class="panelHeader">
+        <div>
+          <h2>Best Picks Board</h2>
+          <p>
+            Highest-confidence automatic picks, sorted strongest first.
+            These update every sync as pitchers, results, and model data change.
+          </p>
+        </div>
+      </div>
+
+      <div id="bestPicks" class="gameGrid"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-today">
       <div class="panelHeader">
         <div>
           <h2>Today’s Predictions</h2>
