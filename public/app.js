@@ -134,6 +134,7 @@ function allVisibleGames() {
 function bestBoardGames() {
   return allVisibleGames()
     .filter(game => game.prediction)
+    .filter(game => !game.prediction.locked)
     .filter(game => !isFinalStatus(game.status))
     .sort((a, b) => {
       const ac = Number(a.prediction?.confidence || 0);
@@ -158,7 +159,8 @@ function render() {
   setText("#topConfidence", topConfidence ? `${topConfidence}%` : "--");
 
   const accuracy = state.accuracy?.accuracy;
-  setText("#accuracy", accuracy == null ? "--" : `${accuracy}%`);
+  const excluded = state.accuracy?.excluded || 0;
+  setText("#accuracy", accuracy == null ? "--" : `${accuracy}%${excluded ? ` (${excluded} excluded)` : ""}`);
 
   setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
@@ -216,6 +218,16 @@ function edgeClass(text) {
   return "warn";
 }
 
+function lockBadge(pred) {
+  if (!pred) return "";
+
+  if (pred.locked) {
+    return `<span class="edgeChip warn">🔒 Locked</span>`;
+  }
+
+  return `<span class="edgeChip good">Open until game starts</span>`;
+}
+
 function renderBestBoard(games) {
   const container = $("#bestPicks");
 
@@ -224,7 +236,7 @@ function renderBestBoard(games) {
   if (!games.length) {
     container.innerHTML = `
       <div class="noData">
-        No best picks loaded yet. Tap Sync and the strongest automatic picks will appear here.
+        No open best picks loaded. Games that have already started are locked and removed from this board.
       </div>
     `;
     return;
@@ -256,6 +268,14 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
     const reasons = pred?.reasons || ["Waiting for enough matchup data"];
     const isBestBoard = selector === "#bestPicks";
 
+    let pillText = game.status || "Scheduled";
+
+    if (isBestBoard) {
+      pillText = `#${index + 1} Best`;
+    } else if (pred?.locked) {
+      pillText = "🔒 Locked";
+    }
+
     return `
       <article class="gameCard">
         <div class="gameInner">
@@ -266,7 +286,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
             </div>
 
             <div class="statusPill">
-              ${isBestBoard ? `#${index + 1} Best` : escapeHtml(game.status || "Scheduled")}
+              ${escapeHtml(pillText)}
             </div>
           </div>
 
@@ -308,6 +328,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
             </div>
 
             <div class="edgeList">
+              ${lockBadge(pred)}
               ${reasons.slice(0, 5).map(reason => `
                 <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
               `).join("")}
@@ -361,6 +382,10 @@ function renderMatchups() {
           <strong class="goldText">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</strong>
           ${pred ? `with ${escapeHtml(pred.confidence)}% confidence.` : ""}
         </p>
+
+        <div class="edgeList">
+          ${lockBadge(pred)}
+        </div>
 
         <div class="factorGrid">
           <div class="factor">
@@ -467,6 +492,7 @@ function renderAutoSources() {
         </p>
 
         <div class="edgeList">
+          ${lockBadge(pred)}
           ${reasons.length ? reasons.map(reason => `
             <span class="edgeChip good">${escapeHtml(reason)}</span>
           `).join("") : `<span class="edgeChip warn">Waiting for calculated edges</span>`}
@@ -510,11 +536,19 @@ function renderResults() {
 
   container.innerHTML = predictions.map(pred => {
     const result = pred.result;
+    const counted = result?.counted !== false;
+
     const badge = result
       ? `<span class="resultBadge ${result.correct ? "correct" : "wrong"}">
           ${result.correct ? "Correct" : "Wrong"}
         </span>`
       : `<span class="resultBadge">Pending</span>`;
+
+    const countedBadge = result
+      ? `<span class="edgeChip ${counted ? "good" : "warn"}">
+          ${counted ? "Counted in accuracy" : "Late-created / excluded"}
+        </span>`
+      : "";
 
     return `
       <article class="resultCard">
@@ -538,6 +572,11 @@ function renderResults() {
             <strong>${escapeHtml(result.actualWinnerName)}</strong>
           </p>
         ` : ""}
+
+        <div class="edgeList">
+          ${lockBadge(pred)}
+          ${countedBadge}
+        </div>
 
         ${badge}
       </article>
