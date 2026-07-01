@@ -245,6 +245,7 @@ function render() {
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
   setText("#bestFilterNote", `${bestFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`);
 
+  renderDailySummary();
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
   renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
@@ -253,6 +254,44 @@ function render() {
   renderAutoSources();
   renderResults();
   renderModel();
+}
+
+function renderDailySummary() {
+  const todayGames = state?.todayGames || [];
+  const todayPredictions = todayGames.filter(game => game.prediction);
+  const openToday = todayPredictions.filter(game => {
+    return !game.prediction.locked && !isFinalStatus(game.status);
+  });
+
+  const bestToday = openToday
+    .slice()
+    .sort((a, b) => Number(b.prediction.confidence || 0) - Number(a.prediction.confidence || 0))[0];
+
+  const fallbackBest = todayPredictions
+    .slice()
+    .sort((a, b) => Number(b.prediction.confidence || 0) - Number(a.prediction.confidence || 0))[0];
+
+  const bestGame = bestToday || fallbackBest;
+
+  const strongCount = openToday.filter(game => Number(game.prediction.confidence || 0) >= 68).length;
+  const goodCount = openToday.filter(game => Number(game.prediction.confidence || 0) >= 60).length;
+  const lockedCount = todayPredictions.filter(game => game.prediction.locked).length;
+  const pendingCount = todayPredictions.filter(game => !game.prediction.result).length;
+
+  const accuracy = state.accuracy?.accuracy;
+
+  setText(
+    "#summaryBestPick",
+    bestGame
+      ? `${bestGame.prediction.predictedWinnerName} ${bestGame.prediction.confidence}%`
+      : "--"
+  );
+
+  setText("#summaryStrong", strongCount);
+  setText("#summaryGood", goodCount);
+  setText("#summaryLocked", lockedCount);
+  setText("#summaryPending", pendingCount);
+  setText("#summaryAccuracy", accuracy == null ? "--" : `${accuracy}%`);
 }
 
 function pitcherText(pitcher) {
