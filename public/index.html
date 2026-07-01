@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>MLB Edge Tracker</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>MLB Edge Tracker</h1>
+      <p>Mobile progress tracker + self-learning predictions</p>
+    </div>
+    <button id="syncBtn" class="primary">Sync</button>
+  </header>
+
+  <main>
+    <section class="score-strip">
+      <div class="metric">
+        <span id="todayLabel">Today</span>
+        <strong id="todayCount">0</strong>
+      </div>
+
+      <div class="metric">
+        <span>Graded</span>
+        <strong id="gradedCount">0</strong>
+      </div>
+
+      <div class="metric">
+        <span>Accuracy</span>
+        <strong id="accuracy">--</strong>
+      </div>
+
+      <div class="metric">
+        <span>Model Games</span>
+        <strong id="trainedGames">0</strong>
+      </div>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="today">Today</button>
+      <button class="tab" data-tab="tomorrow">Tomorrow</button>
+      <button class="tab" data-tab="teams">Teams</button>
+      <button class="tab" data-tab="injuries">Injuries</button>
+      <button class="tab" data-tab="resources">Resources</button>
+      <button class="tab" data-tab="history">History</button>
+      <button class="tab" data-tab="model">Model</button>
+    </nav>
+
+    <section id="status" class="status"></section>
+
+    <section class="panel tabPanel" id="panel-today">
+      <h2>Today’s Predictions</h2>
+      <div id="todayGames" class="cards"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-tomorrow">
+      <h2>Tomorrow’s Predictions</h2>
+      <div id="tomorrowGames" class="cards"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-teams">
+      <h2>Team Progress Snapshot</h2>
+
+      <div class="tableWrap">
+        <table id="teamsTable">
+          <thead>
+            <tr>
+              <th>Team</th>
+              <th>W-L</th>
+              <th>Win%</th>
+              <th>Home</th>
+              <th>Away</th>
+              <th>R/G</th>
+              <th>RA/G</th>
+              <th>Diff/G</th>
+              <th>Streak</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-injuries">
+      <h2>Injury Impact Tracker</h2>
+
+      <form id="injuryForm" class="formCard">
+        <label>
+          Team
+          <select id="injTeam"></select>
+        </label>
+
+        <label>
+          Player
+          <input id="injPlayer" placeholder="Player name" />
+        </label>
+
+        <label>
+          Position
+          <input id="injPosition" placeholder="SP, RP, OF, SS..." />
+        </label>
+
+        <label>
+          Status
+          <input id="injStatus" placeholder="Out, 10-day IL, Day-to-day..." />
+        </label>
+
+        <label>
+          Expected return
+          <input id="injReturn" type="date" />
+        </label>
+
+        <label>
+          Impact score 0-10
+          <input id="injImpact" type="number" min="0" max="10" step="1" value="3" />
+        </label>
+
+        <label class="full">
+          Note
+          <textarea id="injNote" placeholder="Short note"></textarea>
+        </label>
+
+        <button class="primary full" type="submit">Add Injury Impact</button>
+      </form>
+
+      <div id="injuryList" class="cards"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-resources">
+      <h2>Prediction Resource/Data Center</h2>
+
+      <p class="hint">
+        Add any reference data you want the model to consider. Official and trusted sources are weighted first.
+        Outside sources are stored and shown, but weighted lower.
+      </p>
+
+      <form id="resourceForm" class="formCard">
+        <label>
+          Source name
+          <input id="resSource" placeholder="MLB, Baseball Savant, my note..." />
+        </label>
+
+        <label>
+          Source tier
+          <select id="resTier">
+            <option value="official">Official / best</option>
+            <option value="trusted">Trusted reliable</option>
+            <option value="manual">My manual research</option>
+            <option value="outside">Outside source</option>
+          </select>
+        </label>
+
+        <label>
+          Data type
+          <select id="resType">
+            <option value="lineup">Lineup</option>
+            <option value="pitcher">Pitcher</option>
+            <option value="injury">Injury</option>
+            <option value="team_form">Team form</option>
+            <option value="h2h">Head-to-head</option>
+            <option value="weather">Weather</option>
+            <option value="travel">Travel/rest</option>
+            <option value="general">General</option>
+          </select>
+        </label>
+
+        <label>
+          Team affected
+          <select id="resTeam"></select>
+        </label>
+
+        <label>
+          Opponent optional
+          <select id="resOpponent"></select>
+        </label>
+
+        <label>
+          Applies to date
+          <input id="resDate" type="date" />
+        </label>
+
+        <label>
+          Impact -10 to +10
+          <input id="resImpact" type="number" min="-10" max="10" step="1" value="2" />
+        </label>
+
+        <label>
+          Confidence 0-100
+          <input id="resConfidence" type="number" min="0" max="100" step="5" value="70" />
+        </label>
+
+        <label class="full">
+          Title
+          <input id="resTitle" placeholder="Confirmed lineup boost, SP scratched, bullpen tired..." />
+        </label>
+
+        <label class="full">
+          Source URL optional
+          <input id="resUrl" placeholder="Paste a source link if you have one" />
+        </label>
+
+        <label class="full">
+          Reference/data note
+          <textarea id="resNote" placeholder="Positive impact helps Team affected. Negative impact hurts Team affected."></textarea>
+        </label>
+
+        <button class="primary full" type="submit">Add Reference To Model</button>
+      </form>
+
+      <h3>Source priority list</h3>
+      <div id="sourceRegistry" class="sourceRegistry"></div>
+
+      <h3>Stored references used for predictions</h3>
+      <div id="referencesList" class="cards"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-history">
+      <h2>Prediction Outcomes</h2>
+      <p class="hint">Every final game gets marked right/wrong and used to train the next prediction.</p>
+      <div id="historyList" class="cards"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-model">
+      <h2>Self-Learning Model</h2>
+      <p class="hint">The model starts with simple baseball logic, then adjusts weights after each completed game.</p>
+
+      <div id="modelBox" class="modelBox"></div>
+
+      <h3>Update Log</h3>
+      <div id="logList" class="logList"></div>
+
+      <a class="export" href="/api/export" target="_blank">Export stored database JSON</a>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+  </html>
