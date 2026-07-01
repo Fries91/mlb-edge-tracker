@@ -235,6 +235,47 @@
       </div>
     </section>
 
+    <section class="panel dataHealthStatus safetyMonitor">
+      <div class="panelHeader">
+        <div>
+          <h2>Sync Safety Monitor</h2>
+          <p>Keeps the dashboard usable if the MLB feed has a bad response, slow response, or temporary outage.</p>
+        </div>
+      </div>
+
+      <div class="factorGrid">
+        <div class="factor">
+          <span>Last Good Load</span>
+          <strong id="safeLastGood">--</strong>
+        </div>
+
+        <div class="factor">
+          <span>Last Error</span>
+          <strong id="safeLastError">None</strong>
+        </div>
+
+        <div class="factor">
+          <span>Cached Data</span>
+          <strong id="safeCachedData">Checking</strong>
+        </div>
+
+        <div class="factor">
+          <span>Failed Syncs</span>
+          <strong id="safeFailedSyncs">0</strong>
+        </div>
+
+        <div class="factor">
+          <span>Recovery Status</span>
+          <strong id="safeRecoveryStatus">Ready</strong>
+        </div>
+
+        <div class="factor">
+          <span>Next Retry</span>
+          <strong id="safeNextRetry">--</strong>
+        </div>
+      </div>
+    </section>
+
     <nav class="tabs">
       <button class="tab active" data-tab="best">Best Board</button>
       <button class="tab" data-tab="today">Today</button>
