@@ -10,6 +10,7 @@ let lastGoodLoadAt = null;
 let lastErrorMessage = "None";
 let failedSyncs = 0;
 let nextRetryAt = null;
+let deferredInstallPrompt = null;
 
 const FRONTEND_SYNC_MS = 15 * 60 * 1000;
 const CACHE_KEY = "mlb-edge-dashboard-cache";
@@ -295,6 +296,39 @@ function setupBestFilters() {
 
       render();
     });
+  });
+}
+
+function setupInstallButton() {
+  const installBtn = $("#installBtn");
+
+  if (!installBtn) return;
+
+  window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+
+    deferredInstallPrompt = event;
+    installBtn.classList.remove("hidden");
+  });
+
+  installBtn.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+
+    deferredInstallPrompt.prompt();
+
+    try {
+      await deferredInstallPrompt.userChoice;
+    } catch {
+      // Ignore cancelled install prompt.
+    }
+
+    deferredInstallPrompt = null;
+    installBtn.classList.add("hidden");
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    installBtn.classList.add("hidden");
   });
 }
 
@@ -1363,6 +1397,7 @@ if (syncBtn) {
 
 setupTabs();
 setupBestFilters();
+setupInstallButton();
 renderRefreshStatus();
 renderSafetyMonitor();
 
