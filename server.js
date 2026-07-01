@@ -5,6 +5,7 @@ const crypto = require("crypto");
 
 const PORT = process.env.PORT || 8787;
 const MLB = "https://statsapi.mlb.com/api/v1";
+
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "mlb-edge-db.json");
@@ -19,13 +20,62 @@ function defaultDb() {
     injuries: [],
     references: [],
     sourceRegistry: [
-      { id: "mlb-standings", name: "MLB Official Standings / Stats API", tier: "official", priority: 1, reliability: 100, notes: "Primary W-L, home/away, runs, schedule source." },
-      { id: "mlb-pitchers", name: "MLB Official Probable Pitchers", tier: "official", priority: 1, reliability: 100, notes: "Primary probable starter source. Starters can change." },
-      { id: "mlb-injuries", name: "MLB Official Injury Report", tier: "official", priority: 1, reliability: 95, notes: "Official injury reference. Manual impact is stored in this starter build." },
-      { id: "savant", name: "Baseball Savant / Statcast", tier: "trusted", priority: 2, reliability: 90, notes: "Trusted advanced stat reference." },
-      { id: "baseball-reference", name: "Baseball-Reference", tier: "trusted", priority: 2, reliability: 85, notes: "Trusted historical/team/player reference." },
-      { id: "manual", name: "Your Manual Research", tier: "manual", priority: 3, reliability: 70, notes: "Your own matchup, lineup, weather, or form notes." },
-      { id: "outside", name: "Outside Source", tier: "outside", priority: 4, reliability: 45, notes: "Lower-priority outside information." }
+      {
+        id: "mlb-standings",
+        name: "MLB Official Standings / Stats API",
+        tier: "official",
+        priority: 1,
+        reliability: 100,
+        notes: "Primary W-L, home/away, runs, schedule source."
+      },
+      {
+        id: "mlb-pitchers",
+        name: "MLB Official Probable Pitchers",
+        tier: "official",
+        priority: 1,
+        reliability: 100,
+        notes: "Primary probable starter source. Starters can change."
+      },
+      {
+        id: "mlb-injuries",
+        name: "MLB Official Injury Report",
+        tier: "official",
+        priority: 1,
+        reliability: 95,
+        notes: "Official injury reference. Manual impact is stored in this starter build."
+      },
+      {
+        id: "savant",
+        name: "Baseball Savant / Statcast",
+        tier: "trusted",
+        priority: 2,
+        reliability: 90,
+        notes: "Trusted advanced stat reference."
+      },
+      {
+        id: "baseball-reference",
+        name: "Baseball-Reference",
+        tier: "trusted",
+        priority: 2,
+        reliability: 85,
+        notes: "Trusted historical/team/player reference."
+      },
+      {
+        id: "manual",
+        name: "Your Manual Research",
+        tier: "manual",
+        priority: 3,
+        reliability: 70,
+        notes: "Your own matchup, lineup, weather, or form notes."
+      },
+      {
+        id: "outside",
+        name: "Outside Source",
+        tier: "outside",
+        priority: 4,
+        reliability: 45,
+        notes: "Lower-priority outside information."
+      }
     ],
     model: {
       learningRate: 0.12,
@@ -39,7 +89,7 @@ function defaultDb() {
         runDiff: 0.75,
         pitcherEra: 0.45,
         injury: 0.25,
-        resourceImpact: 0.50
+        resourceImpact: 0.5
       }
     },
     logs: []
@@ -47,13 +97,26 @@ function defaultDb() {
 }
 
 function ensureDb() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify(defaultDb(), null, 2));
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify(defaultDb(), null, 2));
+  }
 }
 
 function readDb() {
   ensureDb();
-  const saved = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+
+  let saved = {};
+
+  try {
+    saved = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  } catch {
+    saved = {};
+  }
+
   const fresh = defaultDb();
 
   return {
@@ -75,7 +138,11 @@ function writeDb(db) {
 }
 
 function addLog(db, message) {
-  db.logs.unshift({ at: new Date().toISOString(), message });
+  db.logs = db.logs || [];
+  db.logs.unshift({
+    at: new Date().toISOString(),
+    message
+  });
   db.logs = db.logs.slice(0, 200);
 }
 
@@ -90,16 +157,20 @@ function addDays(dateStr, days) {
 }
 
 function season(dateStr) {
-  return dateStr.slice(0, 4);
+  return String(dateStr).slice(0, 4);
 }
 
 function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, Number(n || 0)));
+  const value = Number(n || 0);
+  return Math.max(min, Math.min(max, value));
 }
 
 function pct(w, l) {
-  const t = Number(w || 0) + Number(l || 0);
-  return t ? Number(w || 0) / t : 0;
+  const wins = Number(w || 0);
+  const losses = Number(l || 0);
+  const total = wins + losses;
+
+  return total ? wins / total : 0;
 }
 
 function splitText(s) {
@@ -109,14 +180,19 @@ function splitText(s) {
 
 function getSplit(splitRecords, type) {
   const wanted = String(type).toLowerCase();
-  return (splitRecords || []).find(s => String(s.type || "").toLowerCase() === wanted) || null;
+
+  return (splitRecords || []).find(s => {
+    return String(s.type || "").toLowerCase() === wanted;
+  }) || null;
 }
 
 function leagueName(name) {
-  if (!name) return "";
-  if (name.includes("American")) return "AL";
-  if (name.includes("National")) return "NL";
-  return name;
+  const n = String(name || "");
+
+  if (n.includes("American")) return "AL";
+  if (n.includes("National")) return "NL";
+
+  return n;
 }
 
 function divisionName(name) {
@@ -132,13 +208,16 @@ async function fetchJson(url) {
     }
   });
 
-  if (!res.ok) throw new Error(`Fetch failed ${res.status}: ${url}`);
+  if (!res.ok) {
+    throw new Error(`Fetch failed ${res.status}: ${url}`);
+  }
 
-  return res.json();
+  return await res.json();
 }
 
 async function syncStandings(db, dateStr) {
-  const url = `${MLB}/standings?leagueId=103,104&season=${season(dateStr)}&standingsTypes=regularSeason&hydrate=team`;
+  const year = season(dateStr);
+  const url = `${MLB}/standings?leagueId=103,104&season=${year}&standingsTypes=regularSeason&hydrate=team`;
   const data = await fetchJson(url);
 
   db.teamDailyStats[dateStr] = db.teamDailyStats[dateStr] || {};
@@ -195,11 +274,13 @@ async function syncStandings(db, dateStr) {
 }
 
 async function pitcherStats(db, person, year) {
-  if (!person?.id) return null;
+  if (!person || !person.id) return null;
 
   const key = `${year}-${person.id}`;
 
-  if (db.pitcherStats[key]) return db.pitcherStats[key];
+  if (db.pitcherStats[key]) {
+    return db.pitcherStats[key];
+  }
 
   const out = {
     id: String(person.id),
@@ -210,13 +291,14 @@ async function pitcherStats(db, person, year) {
   };
 
   try {
-    const data = await fetchJson(`${MLB}/people/${person.id}/stats?stats=season&group=pitching&season=${year}`);
+    const url = `${MLB}/people/${person.id}/stats?stats=season&group=pitching&season=${year}`;
+    const data = await fetchJson(url);
     const stat = data.stats?.[0]?.splits?.[0]?.stat || {};
 
     out.era = stat.era ? Number(stat.era) : null;
     out.whip = stat.whip ? Number(stat.whip) : null;
     out.strikeOuts = stat.strikeOuts ? Number(stat.strikeOuts) : null;
-  } catch (e) {
+  } catch {
     // Keep pitcher name even if stats fail.
   }
 
@@ -225,8 +307,9 @@ async function pitcherStats(db, person, year) {
 }
 
 async function syncSchedule(db, dateStr) {
-  const data = await fetchJson(`${MLB}/schedule?sportId=1&date=${dateStr}&hydrate=probablePitcher,team,linescore`);
   const year = season(dateStr);
+  const url = `${MLB}/schedule?sportId=1&date=${dateStr}&hydrate=probablePitcher,team,linescore`;
+  const data = await fetchJson(url);
 
   for (const day of data.dates || []) {
     for (const g of day.games || []) {
@@ -268,7 +351,10 @@ function activeInjuries(db, teamId) {
   return (db.injuries || []).filter(i => {
     if (String(i.teamId) !== String(teamId)) return false;
     if (i.resolved) return false;
-    if (i.expectedReturn && new Date(i.expectedReturn + "T23:59:59") < now) return false;
+
+    if (i.expectedReturn && new Date(i.expectedReturn + "T23:59:59") < now) {
+      return false;
+    }
 
     return true;
   });
@@ -351,9 +437,9 @@ function resourceImpact(db, game) {
 }
 
 function features(db, game) {
-  const s = db.teamDailyStats[game.date] || {};
-  const home = s[String(game.homeTeamId)];
-  const away = s[String(game.awayTeamId)];
+  const statsByDate = db.teamDailyStats[game.date] || {};
+  const home = statsByDate[String(game.homeTeamId)];
+  const away = statsByDate[String(game.awayTeamId)];
 
   if (!home || !away) return null;
 
@@ -389,9 +475,9 @@ function homeWinProb(db, f) {
 }
 
 function scoreProjection(db, game, prob) {
-  const s = db.teamDailyStats[game.date] || {};
-  const home = s[String(game.homeTeamId)];
-  const away = s[String(game.awayTeamId)];
+  const statsByDate = db.teamDailyStats[game.date] || {};
+  const home = statsByDate[String(game.homeTeamId)];
+  const away = statsByDate[String(game.awayTeamId)];
 
   const leagueEra = 4.2;
   const homeEra = game.homePitcher?.era || leagueEra;
@@ -407,7 +493,11 @@ function scoreProjection(db, game, prob) {
   let awayScore = Math.round(clamp(awayRuns, 1.5, 10.5));
 
   if (homeScore === awayScore) {
-    prob >= 0.5 ? homeScore++ : awayScore++;
+    if (prob >= 0.5) {
+      homeScore += 1;
+    } else {
+      awayScore += 1;
+    }
   }
 
   return {
@@ -421,13 +511,33 @@ function reasons(f, game) {
   const away = game.awayTeamName;
   const out = [];
 
-  if (Math.abs(f.winPct) > 0.015) out.push(f.winPct > 0 ? `${home} has the better win rate` : `${away} has the better win rate`);
-  if (Math.abs(f.homeAway) > 0.03) out.push(f.homeAway > 0 ? `${home} has the stronger home/away split` : `${away} has the stronger road/home split`);
-  if (Math.abs(f.rpg) > 0.08) out.push(f.rpg > 0 ? `${home} scores more runs per game` : `${away} scores more runs per game`);
-  if (Math.abs(f.rapg) > 0.08) out.push(f.rapg > 0 ? `${home} allows fewer runs per game` : `${away} allows fewer runs per game`);
-  if (Math.abs(f.pitcherEra) > 0.12) out.push(f.pitcherEra > 0 ? `${home} has the starter ERA edge` : `${away} has the starter ERA edge`);
-  if (Math.abs(f.injury) > 0.05) out.push(f.injury > 0 ? `${away} has more tracked injury impact` : `${home} has more tracked injury impact`);
-  if (Math.abs(f.resourceImpact) > 0.03) out.push(f.resourceImpact > 0 ? `${home} has a stored reference edge` : `${away} has a stored reference edge`);
+  if (Math.abs(f.winPct) > 0.015) {
+    out.push(f.winPct > 0 ? `${home} has the better win rate` : `${away} has the better win rate`);
+  }
+
+  if (Math.abs(f.homeAway) > 0.03) {
+    out.push(f.homeAway > 0 ? `${home} has the stronger home/away split` : `${away} has the stronger road/home split`);
+  }
+
+  if (Math.abs(f.rpg) > 0.08) {
+    out.push(f.rpg > 0 ? `${home} scores more runs per game` : `${away} scores more runs per game`);
+  }
+
+  if (Math.abs(f.rapg) > 0.08) {
+    out.push(f.rapg > 0 ? `${home} allows fewer runs per game` : `${away} allows fewer runs per game`);
+  }
+
+  if (Math.abs(f.pitcherEra) > 0.12) {
+    out.push(f.pitcherEra > 0 ? `${home} has the starter ERA edge` : `${away} has the starter ERA edge`);
+  }
+
+  if (Math.abs(f.injury) > 0.05) {
+    out.push(f.injury > 0 ? `${away} has more tracked injury impact` : `${home} has more tracked injury impact`);
+  }
+
+  if (Math.abs(f.resourceImpact) > 0.03) {
+    out.push(f.resourceImpact > 0 ? `${home} has a stored reference edge` : `${away} has a stored reference edge`);
+  }
 
   return out.length ? out.slice(0, 4) : ["Matchup is close based on stored stats"];
 }
@@ -509,15 +619,21 @@ function train(db, f, y) {
 }
 
 function gradeIfFinal(db, game) {
-  const isFinal =
-    String(game.status || "").toLowerCase().includes("final") ||
-    String(game.status || "").toLowerCase().includes("completed");
+  const status = String(game.status || "").toLowerCase();
 
-  if (!isFinal || game.awayScore == null || game.homeScore == null) return;
+  const isFinal =
+    status.includes("final") ||
+    status.includes("completed");
+
+  if (!isFinal || game.awayScore == null || game.homeScore == null) {
+    return;
+  }
 
   const pred = db.predictions[game.gamePk];
 
-  if (!pred || pred.result) return;
+  if (!pred || pred.result) {
+    return;
+  }
 
   const actualWinnerTeamId = Number(game.homeScore) > Number(game.awayScore)
     ? game.homeTeamId
@@ -537,6 +653,7 @@ function gradeIfFinal(db, game) {
   };
 
   train(db, pred.features, String(actualWinnerTeamId) === String(game.homeTeamId) ? 1 : 0);
+
   addLog(db, `Graded ${game.awayTeamName} @ ${game.homeTeamName}: ${correct ? "correct" : "wrong"}`);
 }
 
@@ -546,7 +663,7 @@ async function syncDate(db, dateStr) {
 }
 
 function accuracy(db) {
-  const graded = Object.values(db.predictions).filter(p => p.result);
+  const graded = Object.values(db.predictions || {}).filter(p => p.result);
   const correct = graded.filter(p => p.result.correct).length;
 
   return {
@@ -559,7 +676,7 @@ function accuracy(db) {
 function dashboard(db, dateStr) {
   const tomorrow = addDays(dateStr, 1);
 
-  const gamesFor = d => Object.values(db.games)
+  const gamesFor = d => Object.values(db.games || {})
     .filter(g => g.date === d)
     .sort((a, b) => String(a.gameDate).localeCompare(String(b.gameDate)))
     .map(g => ({
@@ -567,7 +684,7 @@ function dashboard(db, dateStr) {
       prediction: db.predictions[g.gamePk] || null
     }));
 
-  const teams = Object.values(db.teams)
+  const teams = Object.values(db.teams || {})
     .map(t => ({
       ...t,
       stats: (db.teamDailyStats[dateStr] || {})[t.id]
@@ -581,13 +698,13 @@ function dashboard(db, dateStr) {
     teams,
     todayGames: gamesFor(dateStr),
     tomorrowGames: gamesFor(tomorrow),
-    injuries: db.injuries,
-    references: db.references,
-    sourceRegistry: db.sourceRegistry,
-    predictions: Object.values(db.predictions).sort((a, b) => String(b.date).localeCompare(String(a.date))),
+    injuries: db.injuries || [],
+    references: db.references || [],
+    sourceRegistry: db.sourceRegistry || [],
+    predictions: Object.values(db.predictions || {}).sort((a, b) => String(b.date).localeCompare(String(a.date))),
     accuracy: accuracy(db),
     model: db.model,
-    logs: db.logs.slice(0, 30)
+    logs: (db.logs || []).slice(0, 30)
   };
 }
 
@@ -608,11 +725,14 @@ function sendFile(res, filePath) {
       return;
     }
 
+    const ext = path.extname(filePath).toLowerCase();
+
     const type = {
       ".html": "text/html",
       ".css": "text/css",
-      ".js": "text/javascript"
-    }[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+      ".js": "text/javascript",
+      ".json": "application/json"
+    }[ext] || "application/octet-stream";
 
     res.writeHead(200, {
       "Content-Type": type
@@ -626,7 +746,9 @@ function readBody(req) {
   return new Promise(resolve => {
     let data = "";
 
-    req.on("data", chunk => data += chunk);
+    req.on("data", chunk => {
+      data += chunk;
+    });
 
     req.on("end", () => {
       try {
@@ -644,7 +766,8 @@ async function router(req, res) {
 
   try {
     if (url.pathname === "/api/dashboard") {
-      return sendJson(res, dashboard(db, url.searchParams.get("date") || todayISO()));
+      const date = url.searchParams.get("date") || todayISO();
+      return sendJson(res, dashboard(db, date));
     }
 
     if (url.pathname === "/api/sync") {
@@ -664,7 +787,7 @@ async function router(req, res) {
     if (url.pathname === "/api/recalculate") {
       const date = url.searchParams.get("date") || todayISO();
 
-      for (const g of Object.values(db.games)) {
+      for (const g of Object.values(db.games || {})) {
         if (g.date === date || g.date === addDays(date, 1)) {
           makePrediction(db, g);
         }
@@ -672,4 +795,158 @@ async function router(req, res) {
 
       writeDb(db);
 
-      return
+      return sendJson(res, {
+        ok: true,
+        dashboard: dashboard(db, date)
+      });
+    }
+
+    if (url.pathname === "/api/injuries" && req.method === "POST") {
+      const body = await readBody(req);
+
+      db.injuries.unshift({
+        id: crypto.randomUUID(),
+        teamId: String(body.teamId || ""),
+        teamName: body.teamName || db.teams[String(body.teamId)]?.name || "",
+        playerName: body.playerName || "",
+        position: body.position || "",
+        status: body.status || "Out",
+        expectedReturn: body.expectedReturn || "",
+        impactScore: clamp(body.impactScore || 1, 0, 10),
+        note: body.note || "",
+        resolved: false,
+        createdAt: new Date().toISOString()
+      });
+
+      for (const g of Object.values(db.games || {})) {
+        makePrediction(db, g);
+      }
+
+      writeDb(db);
+
+      return sendJson(res, {
+        ok: true
+      });
+    }
+
+    if (url.pathname === "/api/injuries/resolve" && req.method === "POST") {
+      const body = await readBody(req);
+      const inj = db.injuries.find(i => i.id === body.id);
+
+      if (inj) {
+        inj.resolved = true;
+      }
+
+      for (const g of Object.values(db.games || {})) {
+        makePrediction(db, g);
+      }
+
+      writeDb(db);
+
+      return sendJson(res, {
+        ok: true
+      });
+    }
+
+    if (url.pathname === "/api/references" && req.method === "POST") {
+      const body = await readBody(req);
+
+      const edgeTeamId = String(body.edgeTeamId || "");
+      const opponentTeamId = String(body.opponentTeamId || "");
+
+      db.references.unshift({
+        id: crypto.randomUUID(),
+        title: body.title || "Reference note",
+        sourceName: body.sourceName || "Manual source",
+        sourceUrl: body.sourceUrl || "",
+        tier: body.tier || "manual",
+        dataType: body.dataType || "general",
+        edgeTeamId,
+        edgeTeamName: db.teams[edgeTeamId]?.name || body.edgeTeamName || "",
+        opponentTeamId,
+        opponentTeamName: opponentTeamId ? db.teams[opponentTeamId]?.name || body.opponentTeamName || "" : "",
+        appliesDate: body.appliesDate || "",
+        impactScore: clamp(body.impactScore || 0, -10, 10),
+        confidence: clamp(body.confidence || 60, 0, 100),
+        note: body.note || "",
+        inactive: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      for (const g of Object.values(db.games || {})) {
+        makePrediction(db, g);
+      }
+
+      addLog(db, `Added reference: ${body.sourceName || "Manual source"}`);
+      writeDb(db);
+
+      return sendJson(res, {
+        ok: true
+      });
+    }
+
+    if (url.pathname === "/api/references/inactive" && req.method === "POST") {
+      const body = await readBody(req);
+      const ref = db.references.find(r => r.id === body.id);
+
+      if (ref) {
+        ref.inactive = true;
+      }
+
+      for (const g of Object.values(db.games || {})) {
+        makePrediction(db, g);
+      }
+
+      writeDb(db);
+
+      return sendJson(res, {
+        ok: true
+      });
+    }
+
+    if (url.pathname === "/api/export") {
+      return sendJson(res, db);
+    }
+
+    const safePath = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");
+    const filePath = path.normalize(path.join(PUBLIC_DIR, safePath));
+
+    if (!filePath.startsWith(PUBLIC_DIR)) {
+      res.writeHead(403);
+      return res.end("Forbidden");
+    }
+
+    return sendFile(res, filePath);
+  } catch (e) {
+    console.error(e);
+
+    return sendJson(res, {
+      ok: false,
+      error: e.message
+    }, 500);
+  }
+}
+
+ensureDb();
+
+http.createServer(router).listen(PORT, () => {
+  console.log(`MLB Edge Tracker running at http://localhost:${PORT}`);
+});
+
+setInterval(async () => {
+  const db = readDb();
+  const date = todayISO();
+
+  try {
+    await syncDate(db, date);
+    await syncDate(db, addDays(date, 1));
+    writeDb(db);
+
+    console.log("Auto-sync complete");
+  } catch (e) {
+    addLog(db, `Auto-sync failed: ${e.message}`);
+    writeDb(db);
+    console.error(e);
+  }
+}, 60 * 60 * 1000);
