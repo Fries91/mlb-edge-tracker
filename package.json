@@ -1,13 +1,19 @@
 {
   "name": "mlb-edge-tracker",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Mobile-friendly MLB progress tracker with self-learning predictions.",
+  "version": "1.0.0",
+  "description": "Automatic MLB matchup scanner and self-learning analytics dashboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "keywords": [
+    "mlb",
+    "analytics",
+    "predictions",
+    "dashboard"
+  ],
+  "license": "MIT"
 }
