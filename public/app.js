@@ -470,6 +470,69 @@ function strengthSummaryData(game, pred) {
   };
 }
 
+function pickQualityData(game, pred) {
+  if (!pred) {
+    return {
+      label: "Calculating",
+      detail: "Waiting for enough automatic data.",
+      className: "qualityRisky"
+    };
+  }
+
+  const confidence = Number(pred.confidence || 0);
+  const summary = strengthSummaryData(game, pred);
+
+  if (confidence >= 72 && summary.score >= 5 && summary.against <= 1) {
+    return {
+      label: "🏆 Elite Edge",
+      detail: "High confidence with most matchup edges supporting the pick.",
+      className: "qualityElite"
+    };
+  }
+
+  if (confidence >= 68 && summary.score >= 3) {
+    return {
+      label: "🔥 Strong Edge",
+      detail: "Strong confidence with a clear edge advantage.",
+      className: "qualityStrong"
+    };
+  }
+
+  if (confidence >= 60 && summary.score >= 2) {
+    return {
+      label: "✅ Good Edge",
+      detail: "Good confidence with more edges supporting than against.",
+      className: "qualityGood"
+    };
+  }
+
+  if (confidence >= 54 && summary.score >= 0) {
+    return {
+      label: "⚠️ Lean",
+      detail: "Small edge. Useful to watch, but not a dominant matchup.",
+      className: "qualityLean"
+    };
+  }
+
+  return {
+    label: "🧊 Risky / Toss Up",
+    detail: "Low edge separation or too many close/unknown factors.",
+    className: "qualityRisky"
+  };
+}
+
+function pickQualityCard(game, pred) {
+  const quality = pickQualityData(game, pred);
+
+  return `
+    <div class="pickQuality ${escapeHtml(quality.className)}">
+      <span>Pick Quality</span>
+      <strong>${escapeHtml(quality.label)}</strong>
+      <small>${escapeHtml(quality.detail)}</small>
+    </div>
+  `;
+}
+
 function strengthSummary(game, pred) {
   if (!pred) return "";
 
@@ -675,6 +738,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
               </div>
             </div>
 
+            ${pickQualityCard(game, pred)}
             ${strengthSummary(game, pred)}
 
             <div class="edgeList">
@@ -723,6 +787,7 @@ function renderMatchups() {
           ${lockBadge(pred)}
         </div>
 
+        ${pickQualityCard(game, pred)}
         ${strengthSummary(game, pred)}
 
         <div class="factorGrid">
@@ -839,6 +904,7 @@ function renderAutoSources() {
           `).join("") : `<span class="edgeChip warn">Waiting for calculated edges</span>`}
         </div>
 
+        ${pickQualityCard(game, pred)}
         ${strengthSummary(game, pred)}
 
         ${refs.length ? `
