@@ -376,6 +376,7 @@ function render() {
   renderDailySummary();
   renderRefreshStatus();
   renderDataHealth();
+  renderQualityAccuracy();
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
   renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
@@ -453,6 +454,52 @@ function renderDataHealth() {
   setText("#healthPredictions", predictionCount);
   setText("#healthBackendSync", latestBackendSync);
   setText("#healthStoragePath", "/var/data");
+}
+
+function qualityAccuracyText(bucket) {
+  if (!bucket.total) return "--";
+
+  const accuracy = Math.round((bucket.correct / bucket.total) * 100);
+
+  return `${accuracy}% (${bucket.correct}/${bucket.total})`;
+}
+
+function renderQualityAccuracy() {
+  const predictions = state?.predictions || [];
+
+  const buckets = {
+    elite: { correct: 0, total: 0 },
+    strong: { correct: 0, total: 0 },
+    good: { correct: 0, total: 0 },
+    lean: { correct: 0, total: 0 },
+    risky: { correct: 0, total: 0 }
+  };
+
+  let countedGames = 0;
+
+  predictions.forEach(pred => {
+    const result = pred.result;
+
+    if (!result) return;
+    if (result.counted === false) return;
+
+    const quality = pickQualityData(pred, pred);
+    const key = buckets[quality.key] ? quality.key : "risky";
+
+    buckets[key].total += 1;
+    countedGames += 1;
+
+    if (result.correct) {
+      buckets[key].correct += 1;
+    }
+  });
+
+  setText("#qualityEliteAccuracy", qualityAccuracyText(buckets.elite));
+  setText("#qualityStrongAccuracy", qualityAccuracyText(buckets.strong));
+  setText("#qualityGoodAccuracy", qualityAccuracyText(buckets.good));
+  setText("#qualityLeanAccuracy", qualityAccuracyText(buckets.lean));
+  setText("#qualityRiskyAccuracy", qualityAccuracyText(buckets.risky));
+  setText("#qualityCountedGames", countedGames);
 }
 
 function pitcherText(pitcher) {
