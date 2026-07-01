@@ -255,11 +255,26 @@ button {
   line-height: 1;
 }
 
+.panel {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(20, 39, 55, 0.9), rgba(8, 18, 28, 0.92));
+  box-shadow: var(--shadow);
+}
+
+.dailySummary,
+.autoRefreshStatus,
+.dataHealthStatus {
+  margin-top: 12px;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 4px 0 12px;
+  padding: 16px 0 12px;
   scrollbar-width: none;
 }
 
@@ -283,15 +298,6 @@ button {
   background: linear-gradient(135deg, var(--gold), var(--gold2));
   border-color: rgba(255, 209, 92, 0.8);
   box-shadow: 0 12px 26px rgba(255, 184, 77, 0.16);
-}
-
-.panel {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(20, 39, 55, 0.9), rgba(8, 18, 28, 0.92));
-  box-shadow: var(--shadow);
 }
 
 .hidden {
@@ -791,6 +797,83 @@ tr:last-child td {
   line-height: 1.35;
 }
 
+.confidenceDetails {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+.confidenceDetails summary {
+  list-style: none;
+  padding: 11px 12px;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.confidenceDetails summary::-webkit-details-marker {
+  display: none;
+}
+
+.confidenceDetails summary::after {
+  content: "Open";
+  float: right;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.confidenceDetails[open] summary::after {
+  content: "Close";
+}
+
+.confidenceBreakdown {
+  display: grid;
+  gap: 7px;
+  padding: 0 12px 12px;
+}
+
+.breakdownLine {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.breakdownLine span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.breakdownLine strong {
+  color: var(--soft);
+  font-size: 12px;
+  text-align: right;
+}
+
+.breakdownLine.good strong {
+  color: var(--green);
+}
+
+.breakdownLine.warn strong {
+  color: var(--gold);
+}
+
+.breakdownLine.bad strong {
+  color: var(--red);
+}
+
 @media (max-width: 920px) {
   .quickStats {
     grid-template-columns: repeat(3, 1fr);
@@ -883,5 +966,13 @@ tr:last-child td {
 
   .weightValue {
     justify-self: start;
+  }
+
+  .breakdownLine {
+    grid-template-columns: 1fr;
+  }
+
+  .breakdownLine strong {
+    text-align: left;
   }
 }
