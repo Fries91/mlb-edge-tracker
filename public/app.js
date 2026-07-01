@@ -1,6 +1,7 @@
 let state = null;
 let bestFilter = "all";
 let qualityFilter = "all";
+let bestSort = "confidence";
 let lastSyncAt = null;
 let nextAutoSyncAt = null;
 let currentRefreshStatus = "Ready";
@@ -154,6 +155,13 @@ function qualityFilterLabel() {
   return "Quality: All.";
 }
 
+function sortFilterLabel() {
+  if (bestSort === "quality") return "Sort: Best quality.";
+  if (bestSort === "time") return "Sort: Game time.";
+  if (bestSort === "edge") return "Sort: Strongest edge score.";
+  return "Sort: Highest confidence.";
+}
+
 async function getJson(url) {
   const res = await fetch(url, {
     cache: "no-store"
@@ -228,6 +236,17 @@ function setupBestFilters() {
       render();
     });
   });
+
+  $$("#sortFilters .filterBtn").forEach(button => {
+    button.addEventListener("click", () => {
+      bestSort = button.dataset.sort || "confidence";
+
+      $$("#sortFilters .filterBtn").forEach(b => b.classList.remove("active"));
+      button.classList.add("active");
+
+      render();
+    });
+  });
 }
 
 function allVisibleGames() {
@@ -278,12 +297,56 @@ function passesQualityFilter(game) {
   return true;
 }
 
+function sortedBestBoardGames(games) {
+  const copy = games.slice();
+
+  copy.sort((a, b) => {
+    const aConf = Number(a.prediction?.confidence || 0);
+    const bConf = Number(b.prediction?.confidence || 0);
+    const aQuality = qualityRank(pickQualityData(a, a.prediction).key);
+    const bQuality = qualityRank(pickQualityData(b, b.prediction).key);
+    const aEdge = strengthSummaryData(a, a.prediction).score;
+    const bEdge = strengthSummaryData(b, b.prediction).score;
+    const aTime = new Date(a.gameDate || 0).getTime();
+    const bTime = new Date(b.gameDate || 0).getTime();
+
+    if (bestSort === "quality") {
+      if (bQuality !== aQuality) return bQuality - aQuality;
+      if (bConf !== aConf) return bConf - aConf;
+      if (bEdge !== aEdge) return bEdge - aEdge;
+      return aTime - bTime;
+    }
+
+    if (bestSort === "time") {
+      if (aTime !== bTime) return aTime - bTime;
+      if (bConf !== aConf) return bConf - aConf;
+      return bEdge - aEdge;
+    }
+
+    if (bestSort === "edge") {
+      if (bEdge !== aEdge) return bEdge - aEdge;
+      if (bConf !== aConf) return bConf - aConf;
+      if (bQuality !== aQuality) return bQuality - aQuality;
+      return aTime - bTime;
+    }
+
+    if (bConf !== aConf) return bConf - aConf;
+    if (bQuality !== aQuality) return bQuality - aQuality;
+    if (bEdge !== aEdge) return bEdge - aEdge;
+    return aTime - bTime;
+  });
+
+  return copy;
+}
+
 function filteredBestBoardGames() {
   const min = bestFilterMinimum();
 
-  return openBestBoardGames()
+  const filtered = openBestBoardGames()
     .filter(game => Number(game.prediction?.confidence || 0) >= min)
     .filter(game => passesQualityFilter(game));
+
+  return sortedBestBoardGames(filtered);
 }
 
 function render() {
@@ -305,7 +368,10 @@ function render() {
 
   setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
-  setText("#bestFilterNote", `${bestFilterLabel()} ${qualityFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`);
+  setText(
+    "#bestFilterNote",
+    `${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`
+  );
 
   renderDailySummary();
   renderRefreshStatus();
