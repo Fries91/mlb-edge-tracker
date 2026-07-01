@@ -263,6 +263,7 @@ function render() {
 
   renderDailySummary();
   renderRefreshStatus();
+  renderDataHealth();
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
   renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
@@ -318,6 +319,28 @@ function renderRefreshStatus() {
   setText("#refreshBackend", "Hourly");
   setText("#refreshStorage", state ? "Saved DB active" : "Checking");
   setText("#refreshStatus", currentRefreshStatus || "Ready");
+}
+
+function renderDataHealth() {
+  const todayGames = state?.todayGames || [];
+  const tomorrowGames = state?.tomorrowGames || [];
+  const predictions = state?.predictions || [];
+  const logs = state?.logs || [];
+
+  const storedGames = todayGames.length + tomorrowGames.length;
+  const predictionCount = predictions.length;
+  const latestLog = logs[0];
+  const latestBackendSync = latestLog?.at ? formatClock(latestLog.at) : lastSyncAt ? formatClock(lastSyncAt) : "--";
+
+  const apiStatus = state ? "Connected" : "Checking";
+  const dbStatus = state?.model ? "Working" : state ? "Loaded" : "Checking";
+
+  setText("#healthApi", apiStatus);
+  setText("#healthDb", dbStatus);
+  setText("#healthGames", storedGames);
+  setText("#healthPredictions", predictionCount);
+  setText("#healthBackendSync", latestBackendSync);
+  setText("#healthStoragePath", "/var/data");
 }
 
 function pitcherText(pitcher) {
