@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 8787;
 const MLB = "https://statsapi.mlb.com/api/v1";
 
 const PUBLIC_DIR = path.join(__dirname, "public");
-const DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "mlb-edge-db.json");
 
 function defaultDb() {
@@ -139,10 +139,12 @@ function writeDb(db) {
 
 function addLog(db, message) {
   db.logs = db.logs || [];
+
   db.logs.unshift({
     at: new Date().toISOString(),
     message
   });
+
   db.logs = db.logs.slice(0, 200);
 }
 
