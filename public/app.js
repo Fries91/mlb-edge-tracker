@@ -3,6 +3,11 @@ let state = null;
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
 
+function setText(selector, value) {
+  const el = $(selector);
+  if (el) el.textContent = value;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -14,17 +19,13 @@ function escapeHtml(value) {
 
 function number(value, digits = 3) {
   const n = Number(value);
-
   if (!Number.isFinite(n)) return "--";
-
   return n.toFixed(digits);
 }
 
 function percent(value) {
   const n = Number(value);
-
   if (!Number.isFinite(n)) return "--";
-
   return `${Math.round(n * 1000) / 10}%`;
 }
 
@@ -53,6 +54,11 @@ function prettyDate(dateValue) {
   } catch {
     return dateValue;
   }
+}
+
+function isFinalStatus(status) {
+  const s = String(status || "").toLowerCase();
+  return s.includes("final") || s.includes("completed");
 }
 
 function setStatus(text, mode = "ready") {
@@ -95,14 +101,6 @@ async function load(sync = false) {
 
     render();
 
-    const now = new Date().toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit"
-    });
-
-    const lastSync = $("#lastSync");
-    if (lastSync) lastSync.textContent = now;
-
     setStatus("Live", "ready");
   } catch (error) {
     console.error(error);
@@ -126,22 +124,48 @@ function setupTabs() {
   });
 }
 
+function allVisibleGames() {
+  return [
+    ...(state?.todayGames || []),
+    ...(state?.tomorrowGames || [])
+  ];
+}
+
+function bestBoardGames() {
+  return allVisibleGames()
+    .filter(game => game.prediction)
+    .filter(game => !isFinalStatus(game.status))
+    .sort((a, b) => {
+      const ac = Number(a.prediction?.confidence || 0);
+      const bc = Number(b.prediction?.confidence || 0);
+
+      if (bc !== ac) return bc - ac;
+
+      return String(a.gameDate).localeCompare(String(b.gameDate));
+    });
+}
+
 function render() {
   if (!state) return;
 
-  $("#todayCount").textContent = state.todayGames?.length || 0;
-  $("#tomorrowCount").textContent = state.tomorrowGames?.length || 0;
-  $("#predictionCount").textContent = state.predictions?.length || 0;
-  $("#trainedGames").textContent = state.model?.trainedGames || 0;
+  const bestGames = bestBoardGames();
+  const topConfidence = bestGames[0]?.prediction?.confidence;
+
+  setText("#todayCount", state.todayGames?.length || 0);
+  setText("#tomorrowCount", state.tomorrowGames?.length || 0);
+  setText("#predictionCount", state.predictions?.length || 0);
+  setText("#trainedGames", state.model?.trainedGames || 0);
+  setText("#topConfidence", topConfidence ? `${topConfidence}%` : "--");
 
   const accuracy = state.accuracy?.accuracy;
-  $("#accuracy").textContent = accuracy == null ? "--" : `${accuracy}%`;
+  setText("#accuracy", accuracy == null ? "--" : `${accuracy}%`);
 
-  $("#todayDateLabel").textContent = `${prettyDate(state.date)} auto-calculated picks.`;
-  $("#tomorrowDateLabel").textContent = `${prettyDate(state.tomorrow)} early board.`;
+  setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
+  setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
 
-  renderGames("#todayGames", state.todayGames || []);
-  renderGames("#tomorrowGames", state.tomorrowGames || []);
+  renderBestBoard(bestGames);
+  renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
+  renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
   renderMatchups();
   renderTeams();
   renderAutoSources();
@@ -163,7 +187,6 @@ function pitcherText(pitcher) {
 
 function predictedScore(game, pred) {
   if (!pred) return "--";
-
   return `${pred.projectedAwayScore ?? "--"} - ${pred.projectedHomeScore ?? "--"}`;
 }
 
@@ -193,7 +216,24 @@ function edgeClass(text) {
   return "warn";
 }
 
-function renderGames(selector, games) {
+function renderBestBoard(games) {
+  const container = $("#bestPicks");
+
+  if (!container) return;
+
+  if (!games.length) {
+    container.innerHTML = `
+      <div class="noData">
+        No best picks loaded yet. Tap Sync and the strongest automatic picks will appear here.
+      </div>
+    `;
+    return;
+  }
+
+  renderGames("#bestPicks", games.slice(0, 8), "No best picks loaded yet.");
+}
+
+function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap Sync.") {
   const container = $(selector);
 
   if (!container) return;
@@ -201,20 +241,20 @@ function renderGames(selector, games) {
   if (!games.length) {
     container.innerHTML = `
       <div class="noData">
-        No games loaded yet. The app auto-syncs when opened, or you can tap Sync.
+        ${escapeHtml(emptyMessage)}
       </div>
     `;
     return;
   }
 
-  container.innerHTML = games.map(game => {
+  container.innerHTML = games.map((game, index) => {
     const pred = game.prediction;
     const pickId = String(pred?.predictedWinnerTeamId || "");
     const awayPick = pickId === String(game.awayTeamId);
     const homePick = pickId === String(game.homeTeamId);
     const confidence = Math.max(0, Math.min(100, Number(pred?.confidence || 0)));
-
     const reasons = pred?.reasons || ["Waiting for enough matchup data"];
+    const isBestBoard = selector === "#bestPicks";
 
     return `
       <article class="gameCard">
@@ -224,7 +264,10 @@ function renderGames(selector, games) {
               <strong>${escapeHtml(shortTime(game.gameDate))}</strong><br>
               ${escapeHtml(game.venue || "MLB")}
             </div>
-            <div class="statusPill">${escapeHtml(game.status || "Scheduled")}</div>
+
+            <div class="statusPill">
+              ${isBestBoard ? `#${index + 1} Best` : escapeHtml(game.status || "Scheduled")}
+            </div>
           </div>
 
           <div class="teamStack">
@@ -274,13 +317,6 @@ function renderGames(selector, games) {
       </article>
     `;
   }).join("");
-}
-
-function allVisibleGames() {
-  return [
-    ...(state?.todayGames || []),
-    ...(state?.tomorrowGames || [])
-  ];
 }
 
 function edgeWinner(value, game) {
@@ -354,7 +390,7 @@ function renderMatchups() {
 
           <div class="factor">
             <span>Pitcher Edge</span>
-            <strong>${escapeHtml(edgeWinner(f.pitcherEra, game))}</strong>
+            <strong>${escapeHtml(edgeWinner(Number(f.pitcherEra || 0) + Number(f.pitcherWhip || 0), game))}</strong>
           </div>
         </div>
 
@@ -436,18 +472,22 @@ function renderAutoSources() {
           `).join("") : `<span class="edgeChip warn">Waiting for calculated edges</span>`}
         </div>
 
+        ${refs.length ? `
+          <div class="factorGrid">
+            ${refs.slice(0, 6).map(ref => `
+              <div class="factor">
+                <span>${escapeHtml(ref.title || ref.dataType || "Auto Factor")}</span>
+                <strong>${escapeHtml(ref.edgeTeamName || "Close")}</strong>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+
         <p>
           Auto inputs used: schedule, team record, home/away split, runs scored,
-          runs allowed, run differential, probable pitchers, previous results,
-          and stored model learning.
+          runs allowed, run differential, probable pitchers, recent form,
+          head-to-head history, previous results, and stored model learning.
         </p>
-
-        ${refs.length ? `
-          <p>
-            Stored source boosts:
-            ${refs.map(r => escapeHtml(r.title || r.sourceName || "Stored source")).join(", ")}
-          </p>
-        ` : ""}
       </article>
     `;
   }).join("");
@@ -461,7 +501,7 @@ function renderResults() {
   const predictions = (state?.predictions || [])
     .slice()
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    .slice(0, 40);
+    .slice(0, 50);
 
   if (!predictions.length) {
     container.innerHTML = `<div class="noData">No predictions stored yet. Sync will create predictions automatically.</div>`;
@@ -557,8 +597,6 @@ if (syncBtn) {
 
 setupTabs();
 
-// Automatic app behavior:
-// Opens, syncs MLB data, builds predictions, and refreshes while the app is open.
 load(true);
 
 setInterval(() => {
