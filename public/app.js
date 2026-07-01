@@ -75,6 +75,48 @@ function setStatus(text, mode = "ready") {
   }
 }
 
+function pickStrength(confidence) {
+  const c = Number(confidence || 0);
+
+  if (c >= 68) {
+    return {
+      label: "🔥 Strong Edge",
+      detail: "Highest confidence automatic edge",
+      className: "good"
+    };
+  }
+
+  if (c >= 60) {
+    return {
+      label: "✅ Good Edge",
+      detail: "Solid calculated edge",
+      className: "good"
+    };
+  }
+
+  if (c >= 54) {
+    return {
+      label: "⚠️ Lean",
+      detail: "Small calculated edge",
+      className: "warn"
+    };
+  }
+
+  return {
+    label: "🧊 Toss Up",
+    detail: "Very close matchup",
+    className: "warn"
+  };
+}
+
+function strengthBadge(pred) {
+  if (!pred) return `<span class="edgeChip warn">Calculating strength</span>`;
+
+  const strength = pickStrength(pred.confidence);
+
+  return `<span class="edgeChip ${strength.className}" title="${escapeHtml(strength.detail)}">${escapeHtml(strength.label)}</span>`;
+}
+
 async function getJson(url) {
   const res = await fetch(url, {
     cache: "no-store"
@@ -328,6 +370,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
             </div>
 
             <div class="edgeList">
+              ${strengthBadge(pred)}
               ${lockBadge(pred)}
               ${reasons.slice(0, 5).map(reason => `
                 <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
@@ -384,6 +427,7 @@ function renderMatchups() {
         </p>
 
         <div class="edgeList">
+          ${strengthBadge(pred)}
           ${lockBadge(pred)}
         </div>
 
@@ -492,6 +536,7 @@ function renderAutoSources() {
         </p>
 
         <div class="edgeList">
+          ${strengthBadge(pred)}
           ${lockBadge(pred)}
           ${reasons.length ? reasons.map(reason => `
             <span class="edgeChip good">${escapeHtml(reason)}</span>
@@ -574,6 +619,7 @@ function renderResults() {
         ` : ""}
 
         <div class="edgeList">
+          ${strengthBadge(pred)}
           ${lockBadge(pred)}
           ${countedBadge}
         </div>
