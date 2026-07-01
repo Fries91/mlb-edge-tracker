@@ -153,6 +153,47 @@
       </div>
     </section>
 
+    <section class="panel dataHealthStatus">
+      <div class="panelHeader">
+        <div>
+          <h2>Data Health Check</h2>
+          <p>Checks the MLB feed, saved database, stored games, predictions, and backend sync health.</p>
+        </div>
+      </div>
+
+      <div class="factorGrid">
+        <div class="factor">
+          <span>MLB API</span>
+          <strong id="healthApi">Checking</strong>
+        </div>
+
+        <div class="factor">
+          <span>Saved Database</span>
+          <strong id="healthDb">Checking</strong>
+        </div>
+
+        <div class="factor">
+          <span>Games Stored</span>
+          <strong id="healthGames">0</strong>
+        </div>
+
+        <div class="factor">
+          <span>Predictions Stored</span>
+          <strong id="healthPredictions">0</strong>
+        </div>
+
+        <div class="factor">
+          <span>Last Backend Sync</span>
+          <strong id="healthBackendSync">--</strong>
+        </div>
+
+        <div class="factor">
+          <span>Storage Path</span>
+          <strong id="healthStoragePath">--</strong>
+        </div>
+      </div>
+    </section>
+
     <nav class="tabs">
       <button class="tab active" data-tab="best">Best Board</button>
       <button class="tab" data-tab="today">Today</button>
