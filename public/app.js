@@ -403,6 +403,107 @@ function edgeValue(value) {
   return `${sign}${number(n, 3)}`;
 }
 
+function getPredictionEdges(game, pred) {
+  if (!pred) return [];
+
+  const f = pred.features || {};
+  const pitcherEdge = combinedEdge([
+    f.pitcherEra,
+    f.pitcherWhip,
+    f.pitcherStrikeouts
+  ]);
+
+  return [
+    { label: "Win % Edge", value: f.winPct },
+    { label: "Home/Away Edge", value: f.homeAway },
+    { label: "Scoring Edge", value: f.rpg },
+    { label: "Run Prevention Edge", value: f.rapg },
+    { label: "Run Differential Edge", value: f.runDiff },
+    { label: "Pitcher Edge", value: pitcherEdge },
+    { label: "Recent Form Edge", value: f.recentForm },
+    { label: "Head-to-Head Edge", value: f.h2h }
+  ];
+}
+
+function edgeSupportsPick(edge, game, pred) {
+  const n = finiteNumber(edge.value);
+
+  if (n === null) return "unknown";
+  if (Math.abs(n) < 0.03) return "close";
+
+  const winner = edgeWinner(n, game);
+  const picked = pred?.predictedWinnerName || "";
+
+  if (!picked || winner === "Close") return "close";
+  if (winner === picked) return "support";
+
+  return "against";
+}
+
+function strengthSummaryData(game, pred) {
+  const edges = getPredictionEdges(game, pred);
+
+  let support = 0;
+  let against = 0;
+  let close = 0;
+
+  edges.forEach(edge => {
+    const type = edgeSupportsPick(edge, game, pred);
+
+    if (type === "support") support += 1;
+    else if (type === "against") against += 1;
+    else close += 1;
+  });
+
+  const score = support - against;
+  const total = support + against + close;
+  const fill = total
+    ? Math.max(5, Math.min(100, Math.round(((score + total) / (total * 2)) * 100)))
+    : 50;
+
+  return {
+    support,
+    against,
+    close,
+    score,
+    fill
+  };
+}
+
+function strengthSummary(game, pred) {
+  if (!pred) return "";
+
+  const summary = strengthSummaryData(game, pred);
+
+  return `
+    <div class="strengthSummary">
+      <div class="strengthBox good">
+        <span>Supports</span>
+        <strong>${escapeHtml(summary.support)}</strong>
+      </div>
+
+      <div class="strengthBox bad">
+        <span>Against</span>
+        <strong>${escapeHtml(summary.against)}</strong>
+      </div>
+
+      <div class="strengthBox warn">
+        <span>Close/Data</span>
+        <strong>${escapeHtml(summary.close)}</strong>
+      </div>
+
+      <div class="strengthBox blue">
+        <span>Edge Score</span>
+        <strong>${escapeHtml(summary.score > 0 ? `+${summary.score}` : summary.score)}</strong>
+      </div>
+
+      <div class="strengthMiniBar">
+        <div class="strengthMiniFill" style="width:${summary.fill}%;"></div>
+      </div>
+    </div>
+  `;
+}
+
 function breakdownLine(label, value, game, pred) {
   const n = finiteNumber(value);
 
@@ -436,26 +537,14 @@ function breakdownLine(label, value, game, pred) {
 function confidenceBreakdown(game, pred) {
   if (!pred) return "";
 
-  const f = pred.features || {};
-  const pitcherEdge = combinedEdge([
-    f.pitcherEra,
-    f.pitcherWhip,
-    f.pitcherStrikeouts
-  ]);
+  const edges = getPredictionEdges(game, pred);
 
   return `
     <details class="confidenceDetails">
       <summary>Confidence Breakdown</summary>
 
       <div class="confidenceBreakdown">
-        ${breakdownLine("Win % Edge", f.winPct, game, pred)}
-        ${breakdownLine("Home/Away Edge", f.homeAway, game, pred)}
-        ${breakdownLine("Scoring Edge", f.rpg, game, pred)}
-        ${breakdownLine("Run Prevention Edge", f.rapg, game, pred)}
-        ${breakdownLine("Run Differential Edge", f.runDiff, game, pred)}
-        ${breakdownLine("Pitcher Edge", pitcherEdge, game, pred)}
-        ${breakdownLine("Recent Form Edge", f.recentForm, game, pred)}
-        ${breakdownLine("Head-to-Head Edge", f.h2h, game, pred)}
+        ${edges.map(edge => breakdownLine(edge.label, edge.value, game, pred)).join("")}
       </div>
     </details>
   `;
@@ -586,6 +675,8 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
               </div>
             </div>
 
+            ${strengthSummary(game, pred)}
+
             <div class="edgeList">
               ${strengthBadge(pred)}
               ${lockBadge(pred)}
@@ -632,6 +723,8 @@ function renderMatchups() {
           ${lockBadge(pred)}
         </div>
 
+        ${strengthSummary(game, pred)}
+
         <div class="factorGrid">
           <div class="factor">
             <span>Win % Edge</span>
@@ -660,7 +753,7 @@ function renderMatchups() {
 
           <div class="factor">
             <span>Pitcher Edge</span>
-            <strong>${escapeHtml(edgeWinner(Number(f.pitcherEra || 0) + Number(f.pitcherWhip || 0), game))}</strong>
+            <strong>${escapeHtml(edgeWinner(combinedEdge([f.pitcherEra, f.pitcherWhip, f.pitcherStrikeouts]), game))}</strong>
           </div>
         </div>
 
@@ -745,6 +838,8 @@ function renderAutoSources() {
             <span class="edgeChip good">${escapeHtml(reason)}</span>
           `).join("") : `<span class="edgeChip warn">Waiting for calculated edges</span>`}
         </div>
+
+        ${strengthSummary(game, pred)}
 
         ${refs.length ? `
           <div class="factorGrid">
