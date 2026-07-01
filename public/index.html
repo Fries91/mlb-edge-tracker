@@ -112,6 +112,47 @@
       </div>
     </section>
 
+    <section class="panel autoRefreshStatus">
+      <div class="panelHeader">
+        <div>
+          <h2>Auto Refresh Status</h2>
+          <p>Shows when the app last synced, when the next refresh is coming, and whether saved storage is active.</p>
+        </div>
+      </div>
+
+      <div class="factorGrid">
+        <div class="factor">
+          <span>Last Synced</span>
+          <strong id="refreshLastSync">--</strong>
+        </div>
+
+        <div class="factor">
+          <span>Next Auto Sync</span>
+          <strong id="refreshNextSync">--</strong>
+        </div>
+
+        <div class="factor">
+          <span>Frontend Refresh</span>
+          <strong id="refreshFrontend">15 min</strong>
+        </div>
+
+        <div class="factor">
+          <span>Backend Sync</span>
+          <strong id="refreshBackend">Hourly</strong>
+        </div>
+
+        <div class="factor">
+          <span>Data Storage</span>
+          <strong id="refreshStorage">Checking</strong>
+        </div>
+
+        <div class="factor">
+          <span>Status</span>
+          <strong id="refreshStatus">Ready</strong>
+        </div>
+      </div>
+    </section>
+
     <nav class="tabs">
       <button class="tab active" data-tab="best">Best Board</button>
       <button class="tab" data-tab="today">Today</button>
