@@ -874,6 +874,68 @@ tr:last-child td {
   color: var(--red);
 }
 
+.strengthSummary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.strengthBox {
+  padding: 9px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  text-align: center;
+}
+
+.strengthBox span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.strengthBox strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.strengthBox.good strong {
+  color: var(--green);
+}
+
+.strengthBox.bad strong {
+  color: var(--red);
+}
+
+.strengthBox.warn strong {
+  color: var(--gold);
+}
+
+.strengthBox.blue strong {
+  color: var(--blue);
+}
+
+.strengthMiniBar {
+  grid-column: 1 / -1;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.strengthMiniFill {
+  height: 100%;
+  width: 50%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--red), var(--gold), var(--green));
+}
+
 @media (max-width: 920px) {
   .quickStats {
     grid-template-columns: repeat(3, 1fr);
@@ -974,5 +1036,13 @@ tr:last-child td {
 
   .breakdownLine strong {
     text-align: left;
+  }
+
+  .strengthSummary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .strengthMiniBar {
+    grid-column: 1 / -1;
   }
 }
