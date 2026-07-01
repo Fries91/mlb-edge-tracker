@@ -129,7 +129,15 @@ button {
   max-width: 230px;
 }
 
-.syncButton {
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.syncButton,
+.installButton {
   position: relative;
   overflow: hidden;
   display: flex;
@@ -138,13 +146,23 @@ button {
   justify-content: center;
   min-width: 78px;
   min-height: 48px;
-  border: 1px solid rgba(255, 209, 92, 0.55);
   border-radius: 16px;
+  font-weight: 900;
+  touch-action: manipulation;
+}
+
+.syncButton {
+  border: 1px solid rgba(255, 209, 92, 0.55);
   color: #111827;
   background: linear-gradient(135deg, var(--gold), var(--gold2));
   box-shadow: 0 12px 26px rgba(255, 184, 77, 0.2);
-  font-weight: 900;
-  touch-action: manipulation;
+}
+
+.installButton {
+  border: 1px solid rgba(98, 182, 255, 0.5);
+  color: var(--text);
+  background: linear-gradient(135deg, rgba(98, 182, 255, 0.22), rgba(66, 230, 164, 0.18));
+  box-shadow: 0 12px 26px rgba(98, 182, 255, 0.13);
 }
 
 .syncButton::after {
@@ -166,14 +184,16 @@ button {
   }
 }
 
-.syncButton small {
+.syncButton small,
+.installButton small {
   font-size: 10px;
   opacity: 0.76;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-.syncButton:active {
+.syncButton:active,
+.installButton:active {
   transform: scale(0.98);
 }
 
@@ -1127,8 +1147,13 @@ tr:last-child td {
     height: 44px;
   }
 
-  .syncButton {
-    min-width: 68px;
+  .headerActions {
+    gap: 6px;
+  }
+
+  .syncButton,
+  .installButton {
+    min-width: 66px;
     min-height: 44px;
   }
 
@@ -1308,8 +1333,9 @@ tr:last-child td {
     font-size: 15px;
   }
 
-  .syncButton {
-    min-width: 62px;
+  .syncButton,
+  .installButton {
+    min-width: 60px;
   }
 
   .heroPanel h2 {
