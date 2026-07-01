@@ -1,0 +1,19 @@
+{
+  "name": "MLB Edge Tracker",
+  "short_name": "MLB Edge",
+  "description": "Automatic MLB matchup analytics dashboard with self-learning prediction tracking.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071018",
+  "theme_color": "#071018",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
