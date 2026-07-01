@@ -21,64 +21,56 @@ function defaultDb() {
     references: [],
     sourceRegistry: [
       {
-        id: "mlb-standings",
-        name: "MLB Official Standings / Stats API",
+        id: "mlb-schedule",
+        name: "Official MLB Schedule / Scores",
         tier: "official",
         priority: 1,
         reliability: 100,
-        notes: "Primary W-L, home/away, runs, schedule source."
+        notes: "Automatic schedule, scores, venues, and game status."
+      },
+      {
+        id: "mlb-standings",
+        name: "Official MLB Standings / Team Stats",
+        tier: "official",
+        priority: 1,
+        reliability: 100,
+        notes: "Automatic records, home/away splits, runs scored, and runs allowed."
       },
       {
         id: "mlb-pitchers",
-        name: "MLB Official Probable Pitchers",
-        tier: "official",
-        priority: 1,
-        reliability: 100,
-        notes: "Primary probable starter source. Starters can change."
-      },
-      {
-        id: "mlb-injuries",
-        name: "MLB Official Injury Report",
+        name: "Official MLB Probable Pitchers",
         tier: "official",
         priority: 1,
         reliability: 95,
-        notes: "Official injury reference. Manual impact is stored in this starter build."
+        notes: "Automatic probable starter names and season pitching stats when available."
       },
       {
-        id: "savant",
-        name: "Baseball Savant / Statcast",
-        tier: "trusted",
+        id: "auto-recent-form",
+        name: "Automatic Recent Form Engine",
+        tier: "calculated",
         priority: 2,
-        reliability: 90,
-        notes: "Trusted advanced stat reference."
+        reliability: 82,
+        notes: "Calculated from stored recent final scores."
       },
       {
-        id: "baseball-reference",
-        name: "Baseball-Reference",
-        tier: "trusted",
+        id: "auto-h2h",
+        name: "Automatic Head-to-Head Engine",
+        tier: "calculated",
         priority: 2,
-        reliability: 85,
-        notes: "Trusted historical/team/player reference."
+        reliability: 78,
+        notes: "Calculated from stored head-to-head final scores."
       },
       {
-        id: "manual",
-        name: "Your Manual Research",
-        tier: "manual",
-        priority: 3,
-        reliability: 70,
-        notes: "Your own matchup, lineup, weather, or form notes."
-      },
-      {
-        id: "outside",
-        name: "Outside Source",
-        tier: "outside",
-        priority: 4,
-        reliability: 45,
-        notes: "Lower-priority outside information."
+        id: "self-learning",
+        name: "Self-Learning Result Engine",
+        tier: "calculated",
+        priority: 2,
+        reliability: 75,
+        notes: "Grades completed games and adjusts model weights."
       }
     ],
     model: {
-      learningRate: 0.12,
+      learningRate: 0.11,
       trainedGames: 0,
       weights: {
         bias: 0,
@@ -88,8 +80,10 @@ function defaultDb() {
         rapg: 0.55,
         runDiff: 0.75,
         pitcherEra: 0.45,
-        injury: 0.25,
-        resourceImpact: 0.5
+        pitcherWhip: 0.22,
+        pitcherStrikeouts: 0.18,
+        recentForm: 0.72,
+        h2h: 0.34
       }
     },
     logs: []
@@ -118,17 +112,24 @@ function readDb() {
   }
 
   const fresh = defaultDb();
+  const freshWeights = fresh.model.weights;
+  const savedWeights = ((saved.model || {}).weights || {});
+  const cleanWeights = {};
+
+  for (const key of Object.keys(freshWeights)) {
+    cleanWeights[key] = Number.isFinite(Number(savedWeights[key]))
+      ? Number(savedWeights[key])
+      : freshWeights[key];
+  }
 
   return {
     ...fresh,
     ...saved,
+    sourceRegistry: fresh.sourceRegistry,
     model: {
       ...fresh.model,
       ...(saved.model || {}),
-      weights: {
-        ...fresh.model.weights,
-        ...((saved.model || {}).weights || {})
-      }
+      weights: cleanWeights
     }
   };
 }
@@ -139,13 +140,11 @@ function writeDb(db) {
 
 function addLog(db, message) {
   db.logs = db.logs || [];
-
   db.logs.unshift({
     at: new Date().toISOString(),
     message
   });
-
-  db.logs = db.logs.slice(0, 200);
+  db.logs = db.logs.slice(0, 250);
 }
 
 function todayISO() {
@@ -171,7 +170,6 @@ function pct(w, l) {
   const wins = Number(w || 0);
   const losses = Number(l || 0);
   const total = wins + losses;
-
   return total ? wins / total : 0;
 }
 
@@ -182,18 +180,13 @@ function splitText(s) {
 
 function getSplit(splitRecords, type) {
   const wanted = String(type).toLowerCase();
-
-  return (splitRecords || []).find(s => {
-    return String(s.type || "").toLowerCase() === wanted;
-  }) || null;
+  return (splitRecords || []).find(s => String(s.type || "").toLowerCase() === wanted) || null;
 }
 
 function leagueName(name) {
   const n = String(name || "");
-
   if (n.includes("American")) return "AL";
   if (n.includes("National")) return "NL";
-
   return n;
 }
 
@@ -289,7 +282,9 @@ async function pitcherStats(db, person, year) {
     name: person.fullName || "TBD",
     era: null,
     whip: null,
-    strikeOuts: null
+    strikeOuts: null,
+    gamesStarted: null,
+    inningsPitched: null
   };
 
   try {
@@ -300,6 +295,8 @@ async function pitcherStats(db, person, year) {
     out.era = stat.era ? Number(stat.era) : null;
     out.whip = stat.whip ? Number(stat.whip) : null;
     out.strikeOuts = stat.strikeOuts ? Number(stat.strikeOuts) : null;
+    out.gamesStarted = stat.gamesStarted ? Number(stat.gamesStarted) : null;
+    out.inningsPitched = stat.inningsPitched || null;
   } catch {
     // Keep pitcher name even if stats fail.
   }
@@ -308,8 +305,9 @@ async function pitcherStats(db, person, year) {
   return out;
 }
 
-async function syncSchedule(db, dateStr) {
+async function syncSchedule(db, dateStr, options = {}) {
   const year = season(dateStr);
+  const shouldPredict = options.predict !== false;
   const url = `${MLB}/schedule?sportId=1&date=${dateStr}&hydrate=probablePitcher,team,linescore`;
   const data = await fetchJson(url);
 
@@ -322,7 +320,24 @@ async function syncSchedule(db, dateStr) {
       const awayPitcher = await pitcherStats(db, g.teams?.away?.probablePitcher, year);
       const homePitcher = await pitcherStats(db, g.teams?.home?.probablePitcher, year);
 
+      db.teams[String(awayTeam.id)] = db.teams[String(awayTeam.id)] || {
+        id: String(awayTeam.id),
+        name: awayTeam.name || "Away",
+        abbreviation: awayTeam.abbreviation || String(awayTeam.id),
+        league: "",
+        division: ""
+      };
+
+      db.teams[String(homeTeam.id)] = db.teams[String(homeTeam.id)] || {
+        id: String(homeTeam.id),
+        name: homeTeam.name || "Home",
+        abbreviation: homeTeam.abbreviation || String(homeTeam.id),
+        league: "",
+        division: ""
+      };
+
       db.games[gamePk] = {
+        ...(db.games[gamePk] || {}),
         gamePk,
         date: dateStr,
         gameDate: g.gameDate,
@@ -339,103 +354,143 @@ async function syncSchedule(db, dateStr) {
         updatedAt: new Date().toISOString()
       };
 
-      makePrediction(db, db.games[gamePk]);
+      if (shouldPredict) {
+        makePrediction(db, db.games[gamePk]);
+      }
+
       gradeIfFinal(db, db.games[gamePk]);
     }
   }
 
-  addLog(db, `Synced games for ${dateStr}`);
+  addLog(db, shouldPredict ? `Synced games for ${dateStr}` : `Synced recent results for ${dateStr}`);
 }
 
-function activeInjuries(db, teamId) {
-  const now = new Date();
-
-  return (db.injuries || []).filter(i => {
-    if (String(i.teamId) !== String(teamId)) return false;
-    if (i.resolved) return false;
-
-    if (i.expectedReturn && new Date(i.expectedReturn + "T23:59:59") < now) {
-      return false;
-    }
-
-    return true;
-  });
+async function syncRecentResults(db, dateStr, daysBack = 21) {
+  for (let i = daysBack; i >= 1; i--) {
+    const d = addDays(dateStr, -i);
+    await syncSchedule(db, d, { predict: false });
+  }
 }
 
-function injuryScore(db, teamId) {
-  return activeInjuries(db, teamId).reduce((sum, i) => {
-    return sum + Number(i.impactScore || 0);
-  }, 0);
+function isFinalGame(game) {
+  const status = String(game?.status || "").toLowerCase();
+  return status.includes("final") || status.includes("completed");
 }
 
-function tierWeight(tier) {
-  const t = String(tier || "manual").toLowerCase();
-
-  if (t === "official") return 1.0;
-  if (t === "trusted" || t === "reliable") return 0.78;
-  if (t === "manual") return 0.62;
-  if (t === "outside") return 0.42;
-
-  return 0.4;
+function gameWinnerId(game) {
+  if (!isFinalGame(game)) return null;
+  if (game.awayScore == null || game.homeScore == null) return null;
+  if (Number(game.homeScore) > Number(game.awayScore)) return String(game.homeTeamId);
+  if (Number(game.awayScore) > Number(game.homeScore)) return String(game.awayTeamId);
+  return null;
 }
 
-function tierOrder(tier) {
-  const t = String(tier || "manual").toLowerCase();
-
-  if (t === "official") return 1;
-  if (t === "trusted" || t === "reliable") return 2;
-  if (t === "manual") return 3;
-  if (t === "outside") return 4;
-
-  return 5;
-}
-
-function gameRefs(db, game) {
-  return (db.references || [])
-    .filter(r => {
-      if (r.inactive) return false;
-      if (r.appliesDate && r.appliesDate !== game.date) return false;
-      if (r.gamePk && String(r.gamePk) !== String(game.gamePk)) return false;
-      if (!r.edgeTeamId) return false;
-
-      const edge = String(r.edgeTeamId);
-      const opp = String(r.opponentTeamId || "");
-      const teams = [String(game.homeTeamId), String(game.awayTeamId)];
-
-      if (!teams.includes(edge)) return false;
-      if (opp && !teams.includes(opp)) return false;
-
-      return true;
+function teamGamesBefore(db, teamId, beforeDate, maxGames = 10) {
+  return Object.values(db.games || {})
+    .filter(g => {
+      if (!isFinalGame(g)) return false;
+      if (String(g.date) >= String(beforeDate)) return false;
+      return String(g.homeTeamId) === String(teamId) || String(g.awayTeamId) === String(teamId);
     })
-    .sort((a, b) => tierOrder(a.tier) - tierOrder(b.tier));
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, maxGames);
 }
 
-function resourceImpact(db, game) {
-  const refs = gameRefs(db, game);
-  let score = 0;
-  const details = [];
+function teamRecentForm(db, teamId, beforeDate, maxGames = 10) {
+  const games = teamGamesBefore(db, teamId, beforeDate, maxGames);
+  let wins = 0;
+  let losses = 0;
+  let scored = 0;
+  let allowed = 0;
 
-  for (const r of refs) {
-    const raw = clamp(r.impactScore, -10, 10) / 10;
-    const conf = clamp(r.confidence || 60, 0, 100) / 100;
-    const weighted = raw * conf * tierWeight(r.tier);
+  for (const g of games) {
+    const isHome = String(g.homeTeamId) === String(teamId);
+    const teamScore = Number(isHome ? g.homeScore : g.awayScore);
+    const oppScore = Number(isHome ? g.awayScore : g.homeScore);
 
-    const homePerspective = String(r.edgeTeamId) === String(game.homeTeamId)
-      ? weighted
-      : -weighted;
+    if (teamScore > oppScore) wins += 1;
+    if (teamScore < oppScore) losses += 1;
 
-    score += homePerspective;
-
-    details.push({
-      ...r,
-      weightedImpact: Number(homePerspective.toFixed(4))
-    });
+    scored += teamScore;
+    allowed += oppScore;
   }
 
+  const total = wins + losses;
+
   return {
-    score: clamp(score, -1.25, 1.25),
-    details: details.slice(0, 8)
+    games: total,
+    wins,
+    losses,
+    winPct: total ? wins / total : 0.5,
+    runDiffPerGame: total ? (scored - allowed) / total : 0,
+    label: total ? `${wins}-${losses} last ${total}` : "No recent finals"
   };
+}
+
+function headToHead(db, homeTeamId, awayTeamId, beforeDate, maxGames = 10) {
+  const games = Object.values(db.games || {})
+    .filter(g => {
+      if (!isFinalGame(g)) return false;
+      if (String(g.date) >= String(beforeDate)) return false;
+
+      const home = String(g.homeTeamId);
+      const away = String(g.awayTeamId);
+      const a = String(homeTeamId);
+      const b = String(awayTeamId);
+
+      return (home === a && away === b) || (home === b && away === a);
+    })
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, maxGames);
+
+  let homeWins = 0;
+  let awayWins = 0;
+  let homeRuns = 0;
+  let awayRuns = 0;
+
+  for (const g of games) {
+    const homeIsTrackedHome = String(g.homeTeamId) === String(homeTeamId);
+
+    const trackedHomeScore = Number(homeIsTrackedHome ? g.homeScore : g.awayScore);
+    const trackedAwayScore = Number(homeIsTrackedHome ? g.awayScore : g.homeScore);
+
+    homeRuns += trackedHomeScore;
+    awayRuns += trackedAwayScore;
+
+    if (trackedHomeScore > trackedAwayScore) homeWins += 1;
+    if (trackedAwayScore > trackedHomeScore) awayWins += 1;
+  }
+
+  const total = homeWins + awayWins;
+
+  return {
+    games: total,
+    homeWins,
+    awayWins,
+    homeWinPct: total ? homeWins / total : 0.5,
+    runDiffPerGame: total ? (homeRuns - awayRuns) / total : 0,
+    label: total ? `${homeWins}-${awayWins} H2H last ${total}` : "No recent H2H"
+  };
+}
+
+function pitcherEraEdge(homePitcher, awayPitcher) {
+  const leagueEra = 4.2;
+  const homeEra = Number(homePitcher?.era || leagueEra);
+  const awayEra = Number(awayPitcher?.era || leagueEra);
+  return (awayEra - homeEra) / 5;
+}
+
+function pitcherWhipEdge(homePitcher, awayPitcher) {
+  const leagueWhip = 1.3;
+  const homeWhip = Number(homePitcher?.whip || leagueWhip);
+  const awayWhip = Number(awayPitcher?.whip || leagueWhip);
+  return (awayWhip - homeWhip) / 2;
+}
+
+function pitcherStrikeoutEdge(homePitcher, awayPitcher) {
+  const homeKs = Number(homePitcher?.strikeOuts || 0);
+  const awayKs = Number(awayPitcher?.strikeOuts || 0);
+  return clamp((homeKs - awayKs) / 180, -0.8, 0.8);
 }
 
 function features(db, game) {
@@ -445,9 +500,9 @@ function features(db, game) {
 
   if (!home || !away) return null;
 
-  const homeEra = game.homePitcher?.era || 4.2;
-  const awayEra = game.awayPitcher?.era || 4.2;
-  const res = resourceImpact(db, game);
+  const homeForm = teamRecentForm(db, game.homeTeamId, game.date, 10);
+  const awayForm = teamRecentForm(db, game.awayTeamId, game.date, 10);
+  const h2h = headToHead(db, game.homeTeamId, game.awayTeamId, game.date, 10);
 
   return {
     winPct: home.winPct - away.winPct,
@@ -455,9 +510,11 @@ function features(db, game) {
     rpg: (home.runsPerGame - away.runsPerGame) / 2,
     rapg: (away.runsAllowedPerGame - home.runsAllowedPerGame) / 2,
     runDiff: home.runDiffPerGame - away.runDiffPerGame,
-    pitcherEra: (awayEra - homeEra) / 5,
-    injury: (injuryScore(db, game.awayTeamId) - injuryScore(db, game.homeTeamId)) / 10,
-    resourceImpact: res.score
+    pitcherEra: pitcherEraEdge(game.homePitcher, game.awayPitcher),
+    pitcherWhip: pitcherWhipEdge(game.homePitcher, game.awayPitcher),
+    pitcherStrikeouts: pitcherStrikeoutEdge(game.homePitcher, game.awayPitcher),
+    recentForm: (homeForm.winPct - awayForm.winPct) + ((homeForm.runDiffPerGame - awayForm.runDiffPerGame) / 8),
+    h2h: (h2h.homeWinPct - 0.5) + (h2h.runDiffPerGame / 10)
   };
 }
 
@@ -485,21 +542,24 @@ function scoreProjection(db, game, prob) {
   const homeEra = game.homePitcher?.era || leagueEra;
   const awayEra = game.awayPitcher?.era || leagueEra;
 
-  let homeRuns = home.runsPerGame * 0.56 + away.runsAllowedPerGame * 0.44 + 0.15 + (awayEra - leagueEra) * 0.18;
-  let awayRuns = away.runsPerGame * 0.56 + home.runsAllowedPerGame * 0.44 - 0.05 + (homeEra - leagueEra) * 0.18;
+  const homeForm = teamRecentForm(db, game.homeTeamId, game.date, 10);
+  const awayForm = teamRecentForm(db, game.awayTeamId, game.date, 10);
+  const h2h = headToHead(db, game.homeTeamId, game.awayTeamId, game.date, 10);
 
-  homeRuns -= injuryScore(db, game.homeTeamId) * 0.04;
-  awayRuns -= injuryScore(db, game.awayTeamId) * 0.04;
+  let homeRuns = home.runsPerGame * 0.52 + away.runsAllowedPerGame * 0.38 + 0.2 + (awayEra - leagueEra) * 0.16;
+  let awayRuns = away.runsPerGame * 0.52 + home.runsAllowedPerGame * 0.38 - 0.04 + (homeEra - leagueEra) * 0.16;
+
+  homeRuns += homeForm.runDiffPerGame * 0.08;
+  awayRuns += awayForm.runDiffPerGame * 0.08;
+  homeRuns += h2h.runDiffPerGame * 0.04;
+  awayRuns -= h2h.runDiffPerGame * 0.04;
 
   let homeScore = Math.round(clamp(homeRuns, 1.5, 10.5));
   let awayScore = Math.round(clamp(awayRuns, 1.5, 10.5));
 
   if (homeScore === awayScore) {
-    if (prob >= 0.5) {
-      homeScore += 1;
-    } else {
-      awayScore += 1;
-    }
+    if (prob >= 0.5) homeScore += 1;
+    else awayScore += 1;
   }
 
   return {
@@ -508,7 +568,13 @@ function scoreProjection(db, game, prob) {
   };
 }
 
-function reasons(f, game) {
+function factorEdgeName(value, game) {
+  const n = Number(value || 0);
+  if (Math.abs(n) < 0.035) return "Close";
+  return n > 0 ? game.homeTeamName : game.awayTeamName;
+}
+
+function reasons(db, f, game) {
   const home = game.homeTeamName;
   const away = game.awayTeamName;
   const out = [];
@@ -529,19 +595,108 @@ function reasons(f, game) {
     out.push(f.rapg > 0 ? `${home} allows fewer runs per game` : `${away} allows fewer runs per game`);
   }
 
-  if (Math.abs(f.pitcherEra) > 0.12) {
-    out.push(f.pitcherEra > 0 ? `${home} has the starter ERA edge` : `${away} has the starter ERA edge`);
+  if (Math.abs(f.pitcherEra) > 0.12 || Math.abs(f.pitcherWhip) > 0.1) {
+    out.push(f.pitcherEra + f.pitcherWhip > 0 ? `${home} has the starter pitching edge` : `${away} has the starter pitching edge`);
   }
 
-  if (Math.abs(f.injury) > 0.05) {
-    out.push(f.injury > 0 ? `${away} has more tracked injury impact` : `${home} has more tracked injury impact`);
+  if (Math.abs(f.recentForm) > 0.06) {
+    out.push(f.recentForm > 0 ? `${home} has stronger recent form` : `${away} has stronger recent form`);
   }
 
-  if (Math.abs(f.resourceImpact) > 0.03) {
-    out.push(f.resourceImpact > 0 ? `${home} has a stored reference edge` : `${away} has a stored reference edge`);
+  if (Math.abs(f.h2h) > 0.06) {
+    out.push(f.h2h > 0 ? `${home} has the recent head-to-head edge` : `${away} has the recent head-to-head edge`);
   }
 
-  return out.length ? out.slice(0, 4) : ["Matchup is close based on stored stats"];
+  return out.length ? out.slice(0, 6) : ["Matchup is close based on stored automatic factors"];
+}
+
+function autoSourceReferences(db, f, game) {
+  const homeForm = teamRecentForm(db, game.homeTeamId, game.date, 10);
+  const awayForm = teamRecentForm(db, game.awayTeamId, game.date, 10);
+  const h2h = headToHead(db, game.homeTeamId, game.awayTeamId, game.date, 10);
+
+  const list = [];
+
+  function add(id, title, edgeTeamName, value, note, reliability = 80) {
+    list.push({
+      id: `${game.gamePk}-${id}`,
+      title,
+      sourceName: "Auto Source Engine",
+      tier: "calculated",
+      dataType: id,
+      edgeTeamName,
+      impactScore: Number(clamp(value * 10, -10, 10).toFixed(2)),
+      confidence: reliability,
+      note,
+      weightedImpact: Number(value.toFixed(4)),
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  add(
+    "winPct",
+    "Win percentage edge",
+    factorEdgeName(f.winPct, game),
+    f.winPct,
+    "Calculated from official season record.",
+    92
+  );
+
+  add(
+    "homeAway",
+    "Home / road split edge",
+    factorEdgeName(f.homeAway, game),
+    f.homeAway,
+    "Calculated from official home and away records.",
+    86
+  );
+
+  add(
+    "scoring",
+    "Runs per game edge",
+    factorEdgeName(f.rpg, game),
+    f.rpg,
+    "Calculated from official runs scored per game.",
+    84
+  );
+
+  add(
+    "prevention",
+    "Run prevention edge",
+    factorEdgeName(f.rapg, game),
+    f.rapg,
+    "Calculated from official runs allowed per game.",
+    84
+  );
+
+  add(
+    "pitcher",
+    "Probable starter edge",
+    factorEdgeName(f.pitcherEra + f.pitcherWhip + f.pitcherStrikeouts, game),
+    f.pitcherEra + f.pitcherWhip + f.pitcherStrikeouts,
+    "Calculated from probable starter ERA, WHIP, and strikeouts when available.",
+    76
+  );
+
+  add(
+    "recentForm",
+    "Recent form edge",
+    factorEdgeName(f.recentForm, game),
+    f.recentForm,
+    `${game.homeTeamName}: ${homeForm.label}. ${game.awayTeamName}: ${awayForm.label}.`,
+    homeForm.games && awayForm.games ? 78 : 55
+  );
+
+  add(
+    "h2h",
+    "Head-to-head edge",
+    factorEdgeName(f.h2h, game),
+    f.h2h,
+    h2h.label,
+    h2h.games ? 72 : 45
+  );
+
+  return list.sort((a, b) => Math.abs(b.weightedImpact) - Math.abs(a.weightedImpact));
 }
 
 function hashPrediction(f, refs, game) {
@@ -549,9 +704,11 @@ function hashPrediction(f, refs, game) {
     .createHash("sha1")
     .update(JSON.stringify({
       f,
-      refs,
+      refs: refs.map(r => ({ id: r.id, impact: r.weightedImpact })),
       hp: game.homePitcher?.id,
-      ap: game.awayPitcher?.id
+      ap: game.awayPitcher?.id,
+      hs: game.homeScore,
+      as: game.awayScore
     }))
     .digest("hex");
 }
@@ -563,7 +720,7 @@ function makePrediction(db, game) {
 
   const prob = homeWinProb(db, f);
   const projected = scoreProjection(db, game, prob);
-  const refs = resourceImpact(db, game).details;
+  const refs = autoSourceReferences(db, f, game);
   const predHash = hashPrediction(f, refs, game);
   const existing = db.predictions[game.gamePk];
 
@@ -581,7 +738,7 @@ function makePrediction(db, game) {
     projectedAwayScore: projected.awayScore,
     projectedHomeScore: projected.homeScore,
     features: f,
-    reasons: reasons(f, game),
+    reasons: reasons(db, f, game),
     sourceReferences: refs,
     featureHash: predHash,
     createdAt: existing?.createdAt || new Date().toISOString(),
@@ -614,6 +771,7 @@ function train(db, f, y) {
   db.model.weights.bias += lr * error;
 
   for (const [k, v] of Object.entries(f)) {
+    if (!Object.prototype.hasOwnProperty.call(db.model.weights, k)) continue;
     db.model.weights[k] = (db.model.weights[k] || 0) + lr * error * Number(v || 0);
   }
 
@@ -621,13 +779,7 @@ function train(db, f, y) {
 }
 
 function gradeIfFinal(db, game) {
-  const status = String(game.status || "").toLowerCase();
-
-  const isFinal =
-    status.includes("final") ||
-    status.includes("completed");
-
-  if (!isFinal || game.awayScore == null || game.homeScore == null) {
+  if (!isFinalGame(game) || game.awayScore == null || game.homeScore == null) {
     return;
   }
 
@@ -637,9 +789,8 @@ function gradeIfFinal(db, game) {
     return;
   }
 
-  const actualWinnerTeamId = Number(game.homeScore) > Number(game.awayScore)
-    ? game.homeTeamId
-    : game.awayTeamId;
+  const actualWinnerTeamId = gameWinnerId(game);
+  if (!actualWinnerTeamId) return;
 
   const correct = String(actualWinnerTeamId) === String(pred.predictedWinnerTeamId);
 
@@ -655,13 +806,19 @@ function gradeIfFinal(db, game) {
   };
 
   train(db, pred.features, String(actualWinnerTeamId) === String(game.homeTeamId) ? 1 : 0);
-
   addLog(db, `Graded ${game.awayTeamName} @ ${game.homeTeamName}: ${correct ? "correct" : "wrong"}`);
 }
 
-async function syncDate(db, dateStr) {
+async function syncPredictionDate(db, dateStr) {
   await syncStandings(db, dateStr);
-  await syncSchedule(db, dateStr);
+  await syncSchedule(db, dateStr, { predict: true });
+}
+
+async function fullAutoSync(db, dateStr) {
+  await syncRecentResults(db, dateStr, 21);
+  await syncPredictionDate(db, dateStr);
+  await syncPredictionDate(db, addDays(dateStr, 1));
+  addLog(db, "Full automatic sync complete");
 }
 
 function accuracy(db) {
@@ -700,13 +857,13 @@ function dashboard(db, dateStr) {
     teams,
     todayGames: gamesFor(dateStr),
     tomorrowGames: gamesFor(tomorrow),
-    injuries: db.injuries || [],
-    references: db.references || [],
+    injuries: [],
+    references: [],
     sourceRegistry: db.sourceRegistry || [],
     predictions: Object.values(db.predictions || {}).sort((a, b) => String(b.date).localeCompare(String(a.date))),
     accuracy: accuracy(db),
     model: db.model,
-    logs: (db.logs || []).slice(0, 30)
+    logs: (db.logs || []).slice(0, 40)
   };
 }
 
@@ -775,9 +932,7 @@ async function router(req, res) {
     if (url.pathname === "/api/sync") {
       const date = url.searchParams.get("date") || todayISO();
 
-      await syncDate(db, date);
-      await syncDate(db, addDays(date, 1));
-
+      await fullAutoSync(db, date);
       writeDb(db);
 
       return sendJson(res, {
@@ -792,6 +947,7 @@ async function router(req, res) {
       for (const g of Object.values(db.games || {})) {
         if (g.date === date || g.date === addDays(date, 1)) {
           makePrediction(db, g);
+          gradeIfFinal(db, g);
         }
       }
 
@@ -803,112 +959,26 @@ async function router(req, res) {
       });
     }
 
-    if (url.pathname === "/api/injuries" && req.method === "POST") {
-      const body = await readBody(req);
-
-      db.injuries.unshift({
-        id: crypto.randomUUID(),
-        teamId: String(body.teamId || ""),
-        teamName: body.teamName || db.teams[String(body.teamId)]?.name || "",
-        playerName: body.playerName || "",
-        position: body.position || "",
-        status: body.status || "Out",
-        expectedReturn: body.expectedReturn || "",
-        impactScore: clamp(body.impactScore || 1, 0, 10),
-        note: body.note || "",
-        resolved: false,
-        createdAt: new Date().toISOString()
-      });
-
-      for (const g of Object.values(db.games || {})) {
-        makePrediction(db, g);
-      }
-
-      writeDb(db);
-
-      return sendJson(res, {
-        ok: true
-      });
+    if (url.pathname === "/api/export") {
+      return sendJson(res, db);
     }
 
-    if (url.pathname === "/api/injuries/resolve" && req.method === "POST") {
-      const body = await readBody(req);
-      const inj = db.injuries.find(i => i.id === body.id);
-
-      if (inj) {
-        inj.resolved = true;
-      }
-
-      for (const g of Object.values(db.games || {})) {
-        makePrediction(db, g);
-      }
-
-      writeDb(db);
+    if (url.pathname === "/api/injuries" && req.method === "POST") {
+      await readBody(req);
 
       return sendJson(res, {
-        ok: true
+        ok: true,
+        message: "Manual injury input is disabled. The app is automatic-only now."
       });
     }
 
     if (url.pathname === "/api/references" && req.method === "POST") {
-      const body = await readBody(req);
-
-      const edgeTeamId = String(body.edgeTeamId || "");
-      const opponentTeamId = String(body.opponentTeamId || "");
-
-      db.references.unshift({
-        id: crypto.randomUUID(),
-        title: body.title || "Reference note",
-        sourceName: body.sourceName || "Manual source",
-        sourceUrl: body.sourceUrl || "",
-        tier: body.tier || "manual",
-        dataType: body.dataType || "general",
-        edgeTeamId,
-        edgeTeamName: db.teams[edgeTeamId]?.name || body.edgeTeamName || "",
-        opponentTeamId,
-        opponentTeamName: opponentTeamId ? db.teams[opponentTeamId]?.name || body.opponentTeamName || "" : "",
-        appliesDate: body.appliesDate || "",
-        impactScore: clamp(body.impactScore || 0, -10, 10),
-        confidence: clamp(body.confidence || 60, 0, 100),
-        note: body.note || "",
-        inactive: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      for (const g of Object.values(db.games || {})) {
-        makePrediction(db, g);
-      }
-
-      addLog(db, `Added reference: ${body.sourceName || "Manual source"}`);
-      writeDb(db);
+      await readBody(req);
 
       return sendJson(res, {
-        ok: true
+        ok: true,
+        message: "Manual resource input is disabled. The app is automatic-only now."
       });
-    }
-
-    if (url.pathname === "/api/references/inactive" && req.method === "POST") {
-      const body = await readBody(req);
-      const ref = db.references.find(r => r.id === body.id);
-
-      if (ref) {
-        ref.inactive = true;
-      }
-
-      for (const g of Object.values(db.games || {})) {
-        makePrediction(db, g);
-      }
-
-      writeDb(db);
-
-      return sendJson(res, {
-        ok: true
-      });
-    }
-
-    if (url.pathname === "/api/export") {
-      return sendJson(res, db);
     }
 
     const safePath = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");
@@ -941,8 +1011,7 @@ setInterval(async () => {
   const date = todayISO();
 
   try {
-    await syncDate(db, date);
-    await syncDate(db, addDays(date, 1));
+    await fullAutoSync(db, date);
     writeDb(db);
 
     console.log("Auto-sync complete");
