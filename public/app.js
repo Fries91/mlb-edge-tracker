@@ -1,4 +1,5 @@
 let state = null;
+let bestFilter = "all";
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
@@ -117,6 +118,20 @@ function strengthBadge(pred) {
   return `<span class="edgeChip ${strength.className}" title="${escapeHtml(strength.detail)}">${escapeHtml(strength.label)}</span>`;
 }
 
+function bestFilterMinimum() {
+  if (bestFilter === "strong") return 68;
+  if (bestFilter === "good") return 60;
+  if (bestFilter === "lean") return 54;
+  return 0;
+}
+
+function bestFilterLabel() {
+  if (bestFilter === "strong") return "Showing 🔥 Strong Edge picks only, 68%+ confidence.";
+  if (bestFilter === "good") return "Showing ✅ Good Edge+ picks, 60%+ confidence.";
+  if (bestFilter === "lean") return "Showing ⚠️ Lean+ picks, 54%+ confidence.";
+  return "Showing all open picks before game start.";
+}
+
 async function getJson(url) {
   const res = await fetch(url, {
     cache: "no-store"
@@ -166,6 +181,19 @@ function setupTabs() {
   });
 }
 
+function setupBestFilters() {
+  $$(".filterBtn").forEach(button => {
+    button.addEventListener("click", () => {
+      bestFilter = button.dataset.filter || "all";
+
+      $$(".filterBtn").forEach(b => b.classList.remove("active"));
+      button.classList.add("active");
+
+      render();
+    });
+  });
+}
+
 function allVisibleGames() {
   return [
     ...(state?.todayGames || []),
@@ -173,7 +201,7 @@ function allVisibleGames() {
   ];
 }
 
-function bestBoardGames() {
+function openBestBoardGames() {
   return allVisibleGames()
     .filter(game => game.prediction)
     .filter(game => !game.prediction.locked)
@@ -188,11 +216,20 @@ function bestBoardGames() {
     });
 }
 
+function filteredBestBoardGames() {
+  const min = bestFilterMinimum();
+
+  return openBestBoardGames().filter(game => {
+    return Number(game.prediction?.confidence || 0) >= min;
+  });
+}
+
 function render() {
   if (!state) return;
 
-  const bestGames = bestBoardGames();
-  const topConfidence = bestGames[0]?.prediction?.confidence;
+  const allOpenBest = openBestBoardGames();
+  const bestGames = filteredBestBoardGames();
+  const topConfidence = allOpenBest[0]?.prediction?.confidence;
 
   setText("#todayCount", state.todayGames?.length || 0);
   setText("#tomorrowCount", state.tomorrowGames?.length || 0);
@@ -206,6 +243,7 @@ function render() {
 
   setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
+  setText("#bestFilterNote", `${bestFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`);
 
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
@@ -278,7 +316,7 @@ function renderBestBoard(games) {
   if (!games.length) {
     container.innerHTML = `
       <div class="noData">
-        No open best picks loaded. Games that have already started are locked and removed from this board.
+        No picks match this filter right now. Try All, or sync again after more games load.
       </div>
     `;
     return;
@@ -681,6 +719,7 @@ if (syncBtn) {
 }
 
 setupTabs();
+setupBestFilters();
 
 load(true);
 
