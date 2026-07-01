@@ -936,6 +936,93 @@ tr:last-child td {
   background: linear-gradient(90deg, var(--red), var(--gold), var(--green));
 }
 
+.pickQuality {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.pickQuality span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pickQuality strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.pickQuality small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pickQuality.qualityElite {
+  border-color: rgba(184, 148, 255, 0.45);
+  background:
+    radial-gradient(circle at top right, rgba(184, 148, 255, 0.18), transparent 40%),
+    rgba(184, 148, 255, 0.07);
+}
+
+.pickQuality.qualityElite strong {
+  color: var(--purple);
+}
+
+.pickQuality.qualityStrong {
+  border-color: rgba(66, 230, 164, 0.42);
+  background:
+    radial-gradient(circle at top right, rgba(66, 230, 164, 0.15), transparent 40%),
+    rgba(66, 230, 164, 0.07);
+}
+
+.pickQuality.qualityStrong strong {
+  color: var(--green);
+}
+
+.pickQuality.qualityGood {
+  border-color: rgba(98, 182, 255, 0.42);
+  background:
+    radial-gradient(circle at top right, rgba(98, 182, 255, 0.15), transparent 40%),
+    rgba(98, 182, 255, 0.07);
+}
+
+.pickQuality.qualityGood strong {
+  color: var(--blue);
+}
+
+.pickQuality.qualityLean {
+  border-color: rgba(255, 209, 92, 0.42);
+  background:
+    radial-gradient(circle at top right, rgba(255, 209, 92, 0.15), transparent 40%),
+    rgba(255, 209, 92, 0.07);
+}
+
+.pickQuality.qualityLean strong {
+  color: var(--gold);
+}
+
+.pickQuality.qualityRisky {
+  border-color: rgba(255, 95, 109, 0.35);
+  background:
+    radial-gradient(circle at top right, rgba(255, 95, 109, 0.12), transparent 40%),
+    rgba(255, 95, 109, 0.06);
+}
+
+.pickQuality.qualityRisky strong {
+  color: var(--red);
+}
+
 @media (max-width: 920px) {
   .quickStats {
     grid-template-columns: repeat(3, 1fr);
