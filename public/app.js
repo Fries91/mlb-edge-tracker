@@ -6,7 +6,13 @@ let lastSyncAt = null;
 let nextAutoSyncAt = null;
 let currentRefreshStatus = "Ready";
 
+let lastGoodLoadAt = null;
+let lastErrorMessage = "None";
+let failedSyncs = 0;
+let nextRetryAt = null;
+
 const FRONTEND_SYNC_MS = 15 * 60 * 1000;
+const CACHE_KEY = "mlb-edge-dashboard-cache";
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
@@ -73,6 +79,29 @@ function isFinalStatus(status) {
   return s.includes("final") || s.includes("completed");
 }
 
+function saveDashboardCache(data) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      dashboard: data
+    }));
+  } catch {
+    // Cache is helpful but not required.
+  }
+}
+
+function loadDashboardCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw);
+    return cached?.dashboard || null;
+  } catch {
+    return null;
+  }
+}
+
 function setStatus(text, mode = "ready") {
   currentRefreshStatus = text;
 
@@ -89,6 +118,7 @@ function setStatus(text, mode = "ready") {
   }
 
   renderRefreshStatus();
+  renderSafetyMonitor();
 }
 
 function pickStrength(confidence) {
@@ -187,14 +217,33 @@ async function load(sync = false) {
     state = data.dashboard || data;
 
     lastSyncAt = new Date();
+    lastGoodLoadAt = new Date();
     nextAutoSyncAt = new Date(Date.now() + FRONTEND_SYNC_MS);
+    nextRetryAt = nextAutoSyncAt;
+    failedSyncs = 0;
+    lastErrorMessage = "None";
 
+    saveDashboardCache(state);
     render();
 
     setStatus("Live", "ready");
   } catch (error) {
     console.error(error);
-    setStatus(error.message || "Error", "error");
+
+    failedSyncs += 1;
+    lastErrorMessage = error.message || "Sync failed";
+    nextRetryAt = new Date(Date.now() + FRONTEND_SYNC_MS);
+
+    const cached = state || loadDashboardCache();
+
+    if (cached) {
+      state = cached;
+      render();
+      setStatus("Using cached data", "error");
+    } else {
+      setStatus(lastErrorMessage, "error");
+      renderSafetyMonitor();
+    }
   }
 }
 
@@ -377,6 +426,7 @@ function render() {
   renderRefreshStatus();
   renderDataHealth();
   renderQualityAccuracy();
+  renderSafetyMonitor();
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
   renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
@@ -455,6 +505,22 @@ function renderDataHealth() {
   setText("#healthPredictions", predictionCount);
   setText("#healthBackendSync", latestBackendSync);
   setText("#healthStoragePath", "/var/data");
+}
+
+function renderSafetyMonitor() {
+  const cached = state || loadDashboardCache();
+  const recoveryStatus = failedSyncs === 0
+    ? "Ready"
+    : cached
+      ? "Using cached data"
+      : "Waiting for retry";
+
+  setText("#safeLastGood", lastGoodLoadAt ? formatClock(lastGoodLoadAt) : "--");
+  setText("#safeLastError", lastErrorMessage || "None");
+  setText("#safeCachedData", cached ? "Available" : "None");
+  setText("#safeFailedSyncs", failedSyncs);
+  setText("#safeRecoveryStatus", recoveryStatus);
+  setText("#safeNextRetry", nextRetryAt ? formatClock(nextRetryAt) : "--");
 }
 
 function qualityAccuracyText(bucket) {
@@ -1298,6 +1364,7 @@ if (syncBtn) {
 setupTabs();
 setupBestFilters();
 renderRefreshStatus();
+renderSafetyMonitor();
 
 load(true);
 
