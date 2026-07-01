@@ -384,6 +384,7 @@ function render() {
   renderTeams();
   renderAutoSources();
   renderResults();
+  renderModelReport();
   renderModel();
 }
 
@@ -500,6 +501,89 @@ function renderQualityAccuracy() {
   setText("#qualityLeanAccuracy", qualityAccuracyText(buckets.lean));
   setText("#qualityRiskyAccuracy", qualityAccuracyText(buckets.risky));
   setText("#qualityCountedGames", countedGames);
+}
+
+function average(values) {
+  const usable = values
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value));
+
+  if (!usable.length) return null;
+
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
+}
+
+function qualityName(key) {
+  if (key === "elite") return "🏆 Elite";
+  if (key === "strong") return "🔥 Strong";
+  if (key === "good") return "✅ Good";
+  if (key === "lean") return "⚠️ Lean";
+  return "🧊 Risky";
+}
+
+function renderModelReport() {
+  const predictions = state?.predictions || [];
+
+  const graded = predictions.filter(pred => pred.result);
+  const excluded = graded.filter(pred => pred.result?.counted === false);
+  const counted = graded.filter(pred => pred.result?.counted !== false);
+  const correct = counted.filter(pred => pred.result?.correct);
+  const wrong = counted.filter(pred => !pred.result?.correct);
+
+  const avgCorrect = average(correct.map(pred => pred.confidence));
+  const avgWrong = average(wrong.map(pred => pred.confidence));
+
+  const buckets = {
+    elite: { correct: 0, total: 0 },
+    strong: { correct: 0, total: 0 },
+    good: { correct: 0, total: 0 },
+    lean: { correct: 0, total: 0 },
+    risky: { correct: 0, total: 0 }
+  };
+
+  counted.forEach(pred => {
+    const quality = pickQualityData(pred, pred);
+    const key = buckets[quality.key] ? quality.key : "risky";
+
+    buckets[key].total += 1;
+
+    if (pred.result?.correct) {
+      buckets[key].correct += 1;
+    }
+  });
+
+  let bestQuality = "--";
+  let bestRate = -1;
+
+  Object.entries(buckets).forEach(([key, bucket]) => {
+    if (!bucket.total) return;
+
+    const rate = bucket.correct / bucket.total;
+
+    if (rate > bestRate) {
+      bestRate = rate;
+      bestQuality = `${qualityName(key)} ${Math.round(rate * 100)}% (${bucket.correct}/${bucket.total})`;
+    }
+  });
+
+  let modelStatus = "Collecting Data";
+
+  if (counted.length >= 50) {
+    modelStatus = "Strong Sample";
+  } else if (counted.length >= 25) {
+    modelStatus = "Learning Well";
+  } else if (counted.length >= 10) {
+    modelStatus = "Early Learning";
+  }
+
+  setText("#reportGradedGames", graded.length);
+  setText("#reportCorrectPicks", correct.length);
+  setText("#reportWrongPicks", wrong.length);
+  setText("#reportExcludedGames", excluded.length);
+  setText("#reportAvgConfidenceCorrect", avgCorrect == null ? "--" : `${Math.round(avgCorrect)}%`);
+  setText("#reportAvgConfidenceWrong", avgWrong == null ? "--" : `${Math.round(avgWrong)}%`);
+  setText("#reportBestQuality", bestQuality);
+  setText("#reportModelStatus", modelStatus);
 }
 
 function pitcherText(pitcher) {
