@@ -1,0 +1,13 @@
+{
+  "name": "mlb-edge-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mobile-friendly MLB progress tracker with self-learning predictions.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
