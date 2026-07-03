@@ -13,20 +13,37 @@ const MLB_API = "https://statsapi.mlb.com/api/v1";
 const FRONTEND_URL = "/";
 const SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const PITCHER_CACHE_MS = 6 * 60 * 60 * 1000;
-const LEARN_RATE = 0.035;
+const HISTORY_DAYS = 120;
+const BACKTEST_TRAINING_LIMIT = 420;
+const LEARN_RATE = 0.028;
 
 const DEFAULT_WEIGHTS = {
   bias: 0.04,
-  winPct: 0.9,
-  homeAway: 0.55,
-  rpg: 0.75,
-  rapg: 0.75,
-  runDiff: 0.85,
-  pitcherEra: 0.45,
+
+  winPct: 0.7,
+  homeAway: 0.45,
+  rpg: 0.55,
+  rapg: 0.58,
+  runDiff: 0.72,
+
+  recent7WinPct: 0.62,
+  recent15WinPct: 0.48,
+  recent30WinPct: 0.35,
+  recent7Runs: 0.42,
+  recent7Prevent: 0.44,
+  recentRunDiff: 0.5,
+  streakEdge: 0.18,
+
+  pitcherEra: 0.38,
   pitcherWhip: 0.32,
-  pitcherStrikeouts: 0.2,
-  recentForm: 0.45,
-  h2h: 0.22
+  pitcherStrikeouts: 0.18,
+  pitcherRecentEra: 0.42,
+  pitcherRecentWhip: 0.34,
+  pitcherRecentK: 0.18,
+
+  h2h: 0.16,
+  restEdge: 0.2,
+  bullpenFatigue: 0.28
 };
 
 function ensureDataDir() {
@@ -102,7 +119,7 @@ function logMessage(db, message) {
     message
   });
 
-  db.logs = db.logs.slice(0, 80);
+  db.logs = db.logs.slice(0, 100);
 }
 
 function clamp(value, min, max) {
@@ -137,7 +154,7 @@ function mlb(pathName) {
   return `${MLB_API}${pathName}`;
 }
 
-function fetchJson(url, timeoutMs = 25000) {
+function fetchJson(url, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, res => {
       let body = "";
@@ -168,6 +185,22 @@ function fetchJson(url, timeoutMs = 25000) {
   });
 }
 
+function parseInnings(value) {
+  if (value == null) return 0;
+
+  const text = String(value);
+  const [wholeRaw, partialRaw] = text.split(".");
+  const whole = Number(wholeRaw || 0);
+  const partial = Number(partialRaw || 0);
+
+  if (!Number.isFinite(whole)) return 0;
+
+  if (partial === 1) return whole + 1 / 3;
+  if (partial === 2) return whole + 2 / 3;
+
+  return whole;
+}
+
 async function syncMlbTeams(db) {
   try {
     const data = await fetchJson(mlb("/teams?sportId=1"));
@@ -196,7 +229,7 @@ async function fetchScheduleByDate(date) {
 
 async function fetchScheduleRange(startDate, endDate) {
   const url = mlb(`/schedule?sportId=1&startDate=${startDate}&endDate=${endDate}&hydrate=probablePitcher,team,linescore`);
-  const data = await fetchJson(url);
+  const data = await fetchJson(url, 40000);
   return flattenSchedule(data).map(normalizeGame).filter(Boolean);
 }
 
@@ -215,7 +248,11 @@ function normalizePitcher(pitcher) {
     whip: null,
     strikeOuts: null,
     starts: null,
-    kPerGame: null
+    kPerGame: null,
+    recentEra: null,
+    recentWhip: null,
+    recentKPerGame: null,
+    recentGamesUsed: 0
   };
 }
 
@@ -227,6 +264,10 @@ function normalizeGame(raw) {
 
   const awayScore = away.score ?? raw.linescore?.teams?.away?.runs ?? null;
   const homeScore = home.score ?? raw.linescore?.teams?.home?.runs ?? null;
+
+  const inningCount = Array.isArray(raw.linescore?.innings)
+    ? raw.linescore.innings.length
+    : 9;
 
   return {
     gamePk: String(raw.gamePk),
@@ -240,6 +281,7 @@ function normalizeGame(raw) {
     homeTeamName: home.team.name,
     awayScore: awayScore == null ? null : Number(awayScore),
     homeScore: homeScore == null ? null : Number(homeScore),
+    inningCount,
     awayPitcher: normalizePitcher(away.probablePitcher),
     homePitcher: normalizePitcher(home.probablePitcher)
   };
@@ -258,7 +300,7 @@ async function hydratePitchers(games, db) {
 
   await Promise.all(
     Array.from(ids.keys()).map(async id => {
-      statsById[id] = await getPitcherSeasonStats(id, db, season);
+      statsById[id] = await getPitcherStats(id, db, season);
     })
   );
 
@@ -279,7 +321,7 @@ async function hydratePitchers(games, db) {
   });
 }
 
-async function getPitcherSeasonStats(id, db, season) {
+async function getPitcherStats(id, db, season) {
   const cacheKey = String(id);
   const cached = db.pitchers?.[cacheKey];
   const cachedAt = cached?.updatedAt ? new Date(cached.updatedAt).getTime() : 0;
@@ -292,38 +334,78 @@ async function getPitcherSeasonStats(id, db, season) {
     return cached.stats;
   }
 
+  const baseStats = {
+    era: null,
+    whip: null,
+    strikeOuts: null,
+    starts: null,
+    kPerGame: null,
+    recentEra: null,
+    recentWhip: null,
+    recentKPerGame: null,
+    recentGamesUsed: 0
+  };
+
   try {
-    const url = mlb(`/people/${id}/stats?stats=season&group=pitching&season=${season}`);
-    const data = await fetchJson(url, 15000);
-    const stat = data?.stats?.[0]?.splits?.[0]?.stat || {};
+    const seasonUrl = mlb(`/people/${id}/stats?stats=season&group=pitching&season=${season}`);
+    const seasonData = await fetchJson(seasonUrl, 18000);
+    const stat = seasonData?.stats?.[0]?.splits?.[0]?.stat || {};
 
     const starts = toNumber(stat.gamesStarted, toNumber(stat.gamesPlayed, 0));
     const strikeOuts = toNumber(stat.strikeOuts, null);
 
-    const stats = {
-      era: toNumber(stat.era, null),
-      whip: toNumber(stat.whip, null),
-      strikeOuts,
-      starts,
-      kPerGame: starts && strikeOuts != null ? strikeOuts / starts : null
-    };
-
-    db.pitchers[cacheKey] = {
-      season,
-      updatedAt: new Date().toISOString(),
-      stats
-    };
-
-    return stats;
+    baseStats.era = toNumber(stat.era, null);
+    baseStats.whip = toNumber(stat.whip, null);
+    baseStats.strikeOuts = strikeOuts;
+    baseStats.starts = starts;
+    baseStats.kPerGame = starts && strikeOuts != null ? strikeOuts / starts : null;
   } catch {
-    return {
-      era: null,
-      whip: null,
-      strikeOuts: null,
-      starts: null,
-      kPerGame: null
-    };
+    // Keep defaults.
   }
+
+  try {
+    const logUrl = mlb(`/people/${id}/stats?stats=gameLog&group=pitching&season=${season}`);
+    const logData = await fetchJson(logUrl, 18000);
+    const splits = logData?.stats?.[0]?.splits || [];
+
+    const recent = splits
+      .slice()
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .slice(0, 5);
+
+    let innings = 0;
+    let earnedRuns = 0;
+    let hits = 0;
+    let walks = 0;
+    let strikeouts = 0;
+
+    recent.forEach(split => {
+      const stat = split.stat || {};
+
+      innings += parseInnings(stat.inningsPitched);
+      earnedRuns += toNumber(stat.earnedRuns, 0);
+      hits += toNumber(stat.hits, 0);
+      walks += toNumber(stat.baseOnBalls, 0);
+      strikeouts += toNumber(stat.strikeOuts, 0);
+    });
+
+    if (innings > 0 && recent.length) {
+      baseStats.recentEra = (earnedRuns * 9) / innings;
+      baseStats.recentWhip = (hits + walks) / innings;
+      baseStats.recentKPerGame = strikeouts / recent.length;
+      baseStats.recentGamesUsed = recent.length;
+    }
+  } catch {
+    // Recent pitcher data is helpful but optional.
+  }
+
+  db.pitchers[cacheKey] = {
+    season,
+    updatedAt: new Date().toISOString(),
+    stats: baseStats
+  };
+
+  return baseStats;
 }
 
 function emptyStats() {
@@ -339,8 +421,16 @@ function emptyStats() {
     runsPerGame: 4.4,
     runsAllowedPerGame: 4.4,
     runDiffPerGame: 0,
+    last7: "0-0",
+    last15: "0-0",
+    last30: "0-0",
     last10: "0-0",
-    last10WinPct: 0.5,
+    last7WinPct: 0.5,
+    last15WinPct: 0.5,
+    last30WinPct: 0.5,
+    last7RunsPerGame: 4.4,
+    last7RunsAllowedPerGame: 4.4,
+    last15RunDiffPerGame: 0,
     streak: "--",
     games: []
   };
@@ -410,7 +500,9 @@ function buildTeamStats(db, recentGames) {
       won: awayWon,
       runsFor: game.awayScore,
       runsAgainst: game.homeScore,
-      opponentId: game.homeTeamId
+      opponentId: game.homeTeamId,
+      venue: game.venue,
+      inningCount: game.inningCount || 9
     });
 
     applyTeamGame(records[homeId].stats, {
@@ -419,7 +511,9 @@ function buildTeamStats(db, recentGames) {
       won: homeWon,
       runsFor: game.homeScore,
       runsAgainst: game.awayScore,
-      opponentId: game.awayTeamId
+      opponentId: game.awayTeamId,
+      venue: game.venue,
+      inningCount: game.inningCount || 9
     });
   });
 
@@ -452,8 +546,29 @@ function applyTeamGame(stats, game) {
     runsFor: game.runsFor,
     runsAgainst: game.runsAgainst,
     opponentId: game.opponentId,
-    isHome: game.isHome
+    isHome: game.isHome,
+    venue: game.venue,
+    inningCount: game.inningCount || 9
   });
+}
+
+function rollingStats(games, count) {
+  const sample = games.slice(0, count);
+  const wins = sample.filter(game => game.won).length;
+  const losses = sample.length - wins;
+  const runsFor = sample.reduce((sum, game) => sum + Number(game.runsFor || 0), 0);
+  const runsAgainst = sample.reduce((sum, game) => sum + Number(game.runsAgainst || 0), 0);
+
+  return {
+    text: `${wins}-${losses}`,
+    games: sample.length,
+    wins,
+    losses,
+    winPct: rate(wins, sample.length, 0.5),
+    runsPerGame: sample.length ? runsFor / sample.length : 4.4,
+    runsAllowedPerGame: sample.length ? runsAgainst / sample.length : 4.4,
+    runDiffPerGame: sample.length ? (runsFor - runsAgainst) / sample.length : 0
+  };
 }
 
 function finalizeTeamStats(raw) {
@@ -465,9 +580,10 @@ function finalizeTeamStats(raw) {
     .slice()
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
-  const last10 = games.slice(0, 10);
-  const last10Wins = last10.filter(game => game.won).length;
-  const last10Losses = last10.length - last10Wins;
+  const last7 = rollingStats(games, 7);
+  const last10 = rollingStats(games, 10);
+  const last15 = rollingStats(games, 15);
+  const last30 = rollingStats(games, 30);
 
   let streak = "--";
 
@@ -495,8 +611,20 @@ function finalizeTeamStats(raw) {
     runsPerGame: played ? raw.runsFor / played : 4.4,
     runsAllowedPerGame: played ? raw.runsAgainst / played : 4.4,
     runDiffPerGame: played ? (raw.runsFor - raw.runsAgainst) / played : 0,
-    last10: `${last10Wins}-${last10Losses}`,
-    last10WinPct: rate(last10Wins, last10.length, 0.5),
+
+    last7: last7.text,
+    last10: last10.text,
+    last15: last15.text,
+    last30: last30.text,
+
+    last7WinPct: last7.winPct,
+    last15WinPct: last15.winPct,
+    last30WinPct: last30.winPct,
+
+    last7RunsPerGame: last7.runsPerGame,
+    last7RunsAllowedPerGame: last7.runsAllowedPerGame,
+    last15RunDiffPerGame: last15.runDiffPerGame,
+
     streak,
     games
   };
@@ -533,6 +661,33 @@ function normalizedPitcherStrikeoutEdge(homePitcher, awayPitcher) {
   return clamp((homeK - awayK) / 12, -1, 1);
 }
 
+function normalizedPitcherRecentEraEdge(homePitcher, awayPitcher) {
+  const homeEra = toNumber(homePitcher?.recentEra, null);
+  const awayEra = toNumber(awayPitcher?.recentEra, null);
+
+  if (homeEra == null || awayEra == null) return 0;
+
+  return clamp((awayEra - homeEra) / 6, -1, 1);
+}
+
+function normalizedPitcherRecentWhipEdge(homePitcher, awayPitcher) {
+  const homeWhip = toNumber(homePitcher?.recentWhip, null);
+  const awayWhip = toNumber(awayPitcher?.recentWhip, null);
+
+  if (homeWhip == null || awayWhip == null) return 0;
+
+  return clamp((awayWhip - homeWhip) / 2, -1, 1);
+}
+
+function normalizedPitcherRecentKEdge(homePitcher, awayPitcher) {
+  const homeK = toNumber(homePitcher?.recentKPerGame, null);
+  const awayK = toNumber(awayPitcher?.recentKPerGame, null);
+
+  if (homeK == null || awayK == null) return 0;
+
+  return clamp((homeK - awayK) / 12, -1, 1);
+}
+
 function h2hFeature(homeTeamId, awayTeamId, db) {
   const games = (db.recentGames || [])
     .filter(isFinalGame)
@@ -540,7 +695,7 @@ function h2hFeature(homeTeamId, awayTeamId, db) {
       const teams = [String(game.homeTeamId), String(game.awayTeamId)];
       return teams.includes(String(homeTeamId)) && teams.includes(String(awayTeamId));
     })
-    .slice(-10);
+    .slice(-12);
 
   if (!games.length) return 0;
 
@@ -558,9 +713,106 @@ function h2hFeature(homeTeamId, awayTeamId, db) {
   return clamp((homeWins - awayWins) / games.length, -1, 1);
 }
 
+function daysBetween(a, b) {
+  const one = new Date(`${a}T12:00:00Z`).getTime();
+  const two = new Date(`${b}T12:00:00Z`).getTime();
+
+  if (!Number.isFinite(one) || !Number.isFinite(two)) return 0;
+
+  return Math.round((two - one) / (24 * 60 * 60 * 1000));
+}
+
+function restDaysForTeam(teamId, beforeDate, db) {
+  const games = (db.recentGames || [])
+    .filter(isFinalGame)
+    .filter(game => {
+      return String(game.homeTeamId) === String(teamId) || String(game.awayTeamId) === String(teamId);
+    })
+    .filter(game => String(game.officialDate) < String(beforeDate))
+    .sort((a, b) => String(b.officialDate).localeCompare(String(a.officialDate)));
+
+  if (!games.length) return 3;
+
+  return clamp(daysBetween(games[0].officialDate, beforeDate), 0, 5);
+}
+
+function teamRunsAllowedInGame(game, teamId) {
+  if (String(game.homeTeamId) === String(teamId)) return Number(game.awayScore || 0);
+  if (String(game.awayTeamId) === String(teamId)) return Number(game.homeScore || 0);
+  return 0;
+}
+
+function estimateBullpenFatigue(teamId, beforeDate, db) {
+  const games = (db.recentGames || [])
+    .filter(isFinalGame)
+    .filter(game => {
+      return String(game.homeTeamId) === String(teamId) || String(game.awayTeamId) === String(teamId);
+    })
+    .filter(game => {
+      const diff = daysBetween(game.officialDate, beforeDate);
+      return diff >= 1 && diff <= 3;
+    });
+
+  let fatigue = 0;
+
+  games.forEach(game => {
+    const diff = daysBetween(game.officialDate, beforeDate);
+
+    if (diff === 1) fatigue += 0.18;
+    if (diff === 2) fatigue += 0.1;
+    if (diff === 3) fatigue += 0.05;
+
+    if (Number(game.inningCount || 9) > 9) fatigue += 0.12;
+
+    const allowed = teamRunsAllowedInGame(game, teamId);
+    if (allowed >= 6) fatigue += 0.04;
+    if (allowed >= 9) fatigue += 0.04;
+  });
+
+  return clamp(fatigue, 0, 1);
+}
+
+function streakValue(streak) {
+  const text = String(streak || "");
+  const type = text[0];
+  const count = Number(text.slice(1));
+
+  if (!Number.isFinite(count)) return 0;
+
+  if (type === "W") return clamp(count / 8, 0, 1);
+  if (type === "L") return clamp(-count / 8, -1, 0);
+
+  return 0;
+}
+
+function parkRunAdjustment(venue, db) {
+  const games = (db.recentGames || [])
+    .filter(isFinalGame)
+    .filter(game => game.venue === venue);
+
+  const allGames = (db.recentGames || []).filter(isFinalGame);
+
+  if (games.length < 8 || allGames.length < 20) return 0;
+
+  const venueAvg =
+    games.reduce((sum, game) => sum + Number(game.awayScore || 0) + Number(game.homeScore || 0), 0) / games.length;
+
+  const leagueAvg =
+    allGames.reduce((sum, game) => sum + Number(game.awayScore || 0) + Number(game.homeScore || 0), 0) / allGames.length;
+
+  return clamp((venueAvg - leagueAvg) / 4, -0.7, 0.7);
+}
+
 function calculateFeatures(game, db) {
   const home = teamStats(db, game.homeTeamId);
   const away = teamStats(db, game.awayTeamId);
+  const gameDate = game.officialDate || ymd(game.gameDate);
+
+  const homeRest = restDaysForTeam(game.homeTeamId, gameDate, db);
+  const awayRest = restDaysForTeam(game.awayTeamId, gameDate, db);
+
+  const homeFatigue = estimateBullpenFatigue(game.homeTeamId, gameDate, db);
+  const awayFatigue = estimateBullpenFatigue(game.awayTeamId, gameDate, db);
 
   return {
     winPct: clamp((home.winPct || 0.5) - (away.winPct || 0.5), -1, 1),
@@ -568,11 +820,25 @@ function calculateFeatures(game, db) {
     rpg: clamp(((home.runsPerGame || 4.4) - (away.runsPerGame || 4.4)) / 5, -1, 1),
     rapg: clamp(((away.runsAllowedPerGame || 4.4) - (home.runsAllowedPerGame || 4.4)) / 5, -1, 1),
     runDiff: clamp(((home.runDiffPerGame || 0) - (away.runDiffPerGame || 0)) / 5, -1, 1),
+
+    recent7WinPct: clamp((home.last7WinPct || 0.5) - (away.last7WinPct || 0.5), -1, 1),
+    recent15WinPct: clamp((home.last15WinPct || 0.5) - (away.last15WinPct || 0.5), -1, 1),
+    recent30WinPct: clamp((home.last30WinPct || 0.5) - (away.last30WinPct || 0.5), -1, 1),
+    recent7Runs: clamp(((home.last7RunsPerGame || 4.4) - (away.last7RunsPerGame || 4.4)) / 5, -1, 1),
+    recent7Prevent: clamp(((away.last7RunsAllowedPerGame || 4.4) - (home.last7RunsAllowedPerGame || 4.4)) / 5, -1, 1),
+    recentRunDiff: clamp(((home.last15RunDiffPerGame || 0) - (away.last15RunDiffPerGame || 0)) / 5, -1, 1),
+    streakEdge: clamp(streakValue(home.streak) - streakValue(away.streak), -1, 1),
+
     pitcherEra: normalizedPitcherEraEdge(game.homePitcher, game.awayPitcher),
     pitcherWhip: normalizedPitcherWhipEdge(game.homePitcher, game.awayPitcher),
     pitcherStrikeouts: normalizedPitcherStrikeoutEdge(game.homePitcher, game.awayPitcher),
-    recentForm: clamp((home.last10WinPct || 0.5) - (away.last10WinPct || 0.5), -1, 1),
-    h2h: h2hFeature(game.homeTeamId, game.awayTeamId, db)
+    pitcherRecentEra: normalizedPitcherRecentEraEdge(game.homePitcher, game.awayPitcher),
+    pitcherRecentWhip: normalizedPitcherRecentWhipEdge(game.homePitcher, game.awayPitcher),
+    pitcherRecentK: normalizedPitcherRecentKEdge(game.homePitcher, game.awayPitcher),
+
+    h2h: h2hFeature(game.homeTeamId, game.awayTeamId, db),
+    restEdge: clamp((homeRest - awayRest) / 5, -1, 1),
+    bullpenFatigue: clamp(awayFatigue - homeFatigue, -1, 1)
   };
 }
 
@@ -593,16 +859,30 @@ function edgeTeam(value, game) {
 
 function buildReasons(game, features) {
   const map = [
-    ["winPct", "win rate edge"],
-    ["homeAway", "better home/away split"],
-    ["rpg", "scores more"],
-    ["rapg", "allows fewer runs"],
-    ["runDiff", "better run differential"],
+    ["winPct", "season win-rate edge"],
+    ["homeAway", "home/away split edge"],
+    ["rpg", "scoring edge"],
+    ["rapg", "run prevention edge"],
+    ["runDiff", "run differential edge"],
+
+    ["recent7WinPct", "last 7 form edge"],
+    ["recent15WinPct", "last 15 form edge"],
+    ["recent30WinPct", "last 30 form edge"],
+    ["recent7Runs", "recent offense edge"],
+    ["recent7Prevent", "recent defense edge"],
+    ["recentRunDiff", "recent run differential edge"],
+    ["streakEdge", "streak edge"],
+
     ["pitcherEra", "starter ERA edge"],
     ["pitcherWhip", "starter WHIP edge"],
     ["pitcherStrikeouts", "starter strikeout edge"],
-    ["recentForm", "better recent form"],
-    ["h2h", "head-to-head edge"]
+    ["pitcherRecentEra", "recent starter ERA edge"],
+    ["pitcherRecentWhip", "recent starter WHIP edge"],
+    ["pitcherRecentK", "recent starter strikeout edge"],
+
+    ["h2h", "head-to-head edge"],
+    ["restEdge", "rest-day edge"],
+    ["bullpenFatigue", "bullpen fatigue edge"]
   ];
 
   const reasons = map
@@ -614,7 +894,7 @@ function buildReasons(game, features) {
     }))
     .filter(item => item.team !== "Close")
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-    .slice(0, 5)
+    .slice(0, 7)
     .map(item => `${item.team} ${item.label}`);
 
   return reasons.length ? reasons : ["Very close matchup"];
@@ -634,20 +914,46 @@ function projectedScores(game, db, pickHome) {
   const away = teamStats(db, game.awayTeamId);
   const leagueRuns = 4.4;
 
-  let homeExpected =
-    ((home.runsPerGame || leagueRuns) + (away.runsAllowedPerGame || leagueRuns)) / 2 + 0.15;
+  const homeOffense =
+    ((home.runsPerGame || leagueRuns) * 0.48) +
+    ((home.last7RunsPerGame || leagueRuns) * 0.32) +
+    ((home.last15RunDiffPerGame || 0) * 0.2) +
+    leagueRuns * 0.2;
 
-  let awayExpected =
-    ((away.runsPerGame || leagueRuns) + (home.runsAllowedPerGame || leagueRuns)) / 2;
+  const awayOffense =
+    ((away.runsPerGame || leagueRuns) * 0.48) +
+    ((away.last7RunsPerGame || leagueRuns) * 0.32) +
+    ((away.last15RunDiffPerGame || 0) * 0.2) +
+    leagueRuns * 0.2;
+
+  const homeDefense =
+    ((home.runsAllowedPerGame || leagueRuns) * 0.55) +
+    ((home.last7RunsAllowedPerGame || leagueRuns) * 0.45);
+
+  const awayDefense =
+    ((away.runsAllowedPerGame || leagueRuns) * 0.55) +
+    ((away.last7RunsAllowedPerGame || leagueRuns) * 0.45);
+
+  let homeExpected = (homeOffense + awayDefense) / 2 + 0.12;
+  let awayExpected = (awayOffense + homeDefense) / 2;
 
   const homeEra = toNumber(game.homePitcher?.era, null);
   const awayEra = toNumber(game.awayPitcher?.era, null);
+  const homeRecentEra = toNumber(game.homePitcher?.recentEra, null);
+  const awayRecentEra = toNumber(game.awayPitcher?.recentEra, null);
 
-  if (awayEra != null) homeExpected += clamp((awayEra - 4.2) * 0.16, -0.8, 0.8);
-  if (homeEra != null) awayExpected += clamp((homeEra - 4.2) * 0.16, -0.8, 0.8);
+  if (awayEra != null) homeExpected += clamp((awayEra - 4.2) * 0.12, -0.7, 0.7);
+  if (homeEra != null) awayExpected += clamp((homeEra - 4.2) * 0.12, -0.7, 0.7);
 
-  let homeScore = clamp(Math.round(homeExpected), 1, 11);
-  let awayScore = clamp(Math.round(awayExpected), 1, 11);
+  if (awayRecentEra != null) homeExpected += clamp((awayRecentEra - 4.2) * 0.1, -0.5, 0.5);
+  if (homeRecentEra != null) awayExpected += clamp((homeRecentEra - 4.2) * 0.1, -0.5, 0.5);
+
+  const park = parkRunAdjustment(game.venue, db);
+  homeExpected += park / 2;
+  awayExpected += park / 2;
+
+  let homeScore = clamp(Math.round(homeExpected), 1, 12);
+  let awayScore = clamp(Math.round(awayExpected), 1, 12);
 
   if (pickHome && homeScore <= awayScore) {
     homeScore = awayScore + 1;
@@ -658,8 +964,8 @@ function projectedScores(game, db, pickHome) {
   }
 
   return {
-    projectedHomeScore: clamp(homeScore, 1, 12),
-    projectedAwayScore: clamp(awayScore, 1, 12)
+    projectedHomeScore: clamp(homeScore, 1, 13),
+    projectedAwayScore: clamp(awayScore, 1, 13)
   };
 }
 
@@ -667,10 +973,11 @@ function calculatePrediction(game, db) {
   const features = calculateFeatures(game, db);
   const score = weightedScore(features, db.model.weights);
   const pickHome = score >= 0;
+
   const confidence = clamp(
-    Math.round(50 + Math.tanh(Math.abs(score) * 1.8) * 35),
+    Math.round(50 + Math.tanh(Math.abs(score) * 1.65) * 36),
     51,
-    85
+    86
   );
 
   const scores = projectedScores(game, db, pickHome);
@@ -694,6 +1001,7 @@ function calculatePrediction(game, db) {
     sourceReferences: buildSourceReferences(game, features),
     locked: false,
     lateCreated: false,
+    historicalTraining: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -746,6 +1054,7 @@ function upsertPrediction(game, db) {
     result: existing?.result || null,
     locked: started,
     lateCreated: existing?.lateCreated || started,
+    historicalTraining: existing?.historicalTraining || false,
     updatedAt: new Date().toISOString()
   };
 
@@ -756,6 +1065,36 @@ function upsertPrediction(game, db) {
   }
 
   return prediction;
+}
+
+function backfillHistoricalTraining(db, finalGames) {
+  const games = finalGames
+    .filter(isFinalGame)
+    .slice()
+    .sort((a, b) => String(a.officialDate || "").localeCompare(String(b.officialDate || "")))
+    .slice(-BACKTEST_TRAINING_LIMIT);
+
+  let added = 0;
+
+  games.forEach(game => {
+    const exists = db.predictions.find(pred => String(pred.gamePk) === String(game.gamePk));
+
+    if (exists) return;
+
+    const prediction = {
+      ...calculatePrediction(game, db),
+      locked: true,
+      lateCreated: false,
+      historicalTraining: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.predictions.push(prediction);
+    added += 1;
+  });
+
+  return added;
 }
 
 function syncPredictionsForGames(games, db) {
@@ -797,7 +1136,7 @@ function gradePredictions(db, finalGames) {
         : finalGame.awayTeamName;
 
     const correct = String(actualWinnerTeamId) === String(pred.predictedWinnerTeamId);
-    const counted = !pred.lateCreated;
+    const counted = !pred.lateCreated && !pred.historicalTraining;
 
     pred.locked = true;
     pred.result = {
@@ -818,11 +1157,18 @@ function gradePredictions(db, finalGames) {
 
 function trainPrediction(db, pred) {
   if (!pred.result) return;
-  if (pred.result.counted === false) return;
   if (pred.result.trained) return;
+
+  if (pred.result.counted === false && !pred.historicalTraining) return;
 
   const actualHomeSign =
     String(pred.result.actualWinnerTeamId) === String(pred.homeTeamId) ? 1 : -1;
+
+  const predictedHomeSign =
+    String(pred.predictedWinnerTeamId) === String(pred.homeTeamId) ? 1 : -1;
+
+  const wasWrong = actualHomeSign !== predictedHomeSign;
+  const direction = wasWrong ? actualHomeSign : predictedHomeSign;
 
   const weights = db.model.weights;
 
@@ -830,10 +1176,12 @@ function trainPrediction(db, pred) {
     if (key === "bias") return;
 
     const featureValue = Number(pred.features?.[key] || 0);
-    weights[key] = clamp((weights[key] || 0) + LEARN_RATE * actualHomeSign * featureValue, -2.5, 2.5);
+    const adjustment = LEARN_RATE * direction * featureValue;
+
+    weights[key] = clamp((weights[key] || 0) + adjustment, -2.5, 2.5);
   });
 
-  weights.bias = clamp((weights.bias || 0) + LEARN_RATE * actualHomeSign * 0.05, -0.5, 0.5);
+  weights.bias = clamp((weights.bias || 0) + LEARN_RATE * actualHomeSign * 0.04, -0.5, 0.5);
 
   pred.result.trained = true;
   db.model.trainedGames = db.predictions.filter(item => item.result?.trained).length;
@@ -858,13 +1206,17 @@ function accuracyStats(db) {
 function cleanupDb(db) {
   db.predictions = db.predictions
     .slice()
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
-    .slice(0, 800);
+    .sort((a, b) => {
+      const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
+      if (dateCompare !== 0) return dateCompare;
+      return Number(b.confidence || 0) - Number(a.confidence || 0);
+    })
+    .slice(0, 1000);
 
   db.recentGames = db.recentGames
     .slice()
     .sort((a, b) => String(b.officialDate || "").localeCompare(String(a.officialDate || "")))
-    .slice(0, 900);
+    .slice(0, 2800);
 }
 
 function buildDashboard(db) {
@@ -905,7 +1257,7 @@ async function fullAutoSync() {
 
   const today = ymd();
   const tomorrow = addDays(today, 1);
-  const startDate = addDays(today, -28);
+  const startDate = addDays(today, -HISTORY_DAYS);
 
   await syncMlbTeams(db);
 
@@ -915,6 +1267,9 @@ async function fullAutoSync() {
   db.recentGames = finalRecentGames;
 
   buildTeamStats(db, finalRecentGames);
+
+  const addedTraining = backfillHistoricalTraining(db, finalRecentGames);
+  gradePredictions(db, finalRecentGames);
 
   const todayGames = await fetchScheduleByDate(today);
   const tomorrowGames = await fetchScheduleByDate(tomorrow);
@@ -934,11 +1289,16 @@ async function fullAutoSync() {
     todayGames: todayWithPredictions,
     tomorrowGames: tomorrowWithPredictions,
     lastFullSync: new Date().toISOString(),
-    dataDir: DATA_DIR
+    dataDir: DATA_DIR,
+    historyDays: HISTORY_DAYS,
+    addedHistoricalTraining: addedTraining
   };
 
   cleanupDb(db);
-  logMessage(db, `Full sync complete: ${todayGames.length} today games, ${tomorrowGames.length} tomorrow games.`);
+  logMessage(
+    db,
+    `Accuracy engine sync complete: ${todayGames.length} today, ${tomorrowGames.length} tomorrow, ${finalRecentGames.length} history games, ${addedTraining} new training games.`
+  );
   saveDb(db);
 
   return buildDashboard(db);
@@ -969,6 +1329,7 @@ function mimeType(filePath) {
     ".css": "text/css; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
+    ".webmanifest": "application/manifest+json; charset=utf-8",
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
