@@ -694,6 +694,7 @@ function pitcherText(pitcher) {
   if (pitcher.name) parts.push(pitcher.name);
   if (pitcher.era != null) parts.push(`ERA ${number(pitcher.era, 2)}`);
   if (pitcher.whip != null) parts.push(`WHIP ${number(pitcher.whip, 2)}`);
+  if (pitcher.recentEra != null) parts.push(`Recent ERA ${number(pitcher.recentEra, 2)}`);
 
   return parts.length ? parts.join(" • ") : "Starter: TBD";
 }
@@ -750,21 +751,73 @@ function getPredictionEdges(game, pred) {
   if (!pred) return [];
 
   const f = pred.features || {};
+
   const pitcherEdge = combinedEdge([
     f.pitcherEra,
     f.pitcherWhip,
     f.pitcherStrikeouts
   ]);
 
+  const pitcherRecentEdge = combinedEdge([
+    f.pitcherRecentEra,
+    f.pitcherRecentWhip,
+    f.pitcherRecentK
+  ]);
+
+  const seasonEdge = combinedEdge([
+    f.winPct,
+    f.homeAway,
+    f.rpg,
+    f.rapg,
+    f.runDiff
+  ]);
+
+  const recentTeamEdge = combinedEdge([
+    f.recent7WinPct,
+    f.recent15WinPct,
+    f.recent30WinPct,
+    f.recent7Runs,
+    f.recent7Prevent,
+    f.recentRunDiff,
+    f.streakEdge
+  ]);
+
+  const fatigueEdge = combinedEdge([
+    f.restEdge,
+    f.bullpenFatigue
+  ]);
+
   return [
+    { label: "Overall Season Edge", value: seasonEdge },
+    { label: "Recent Team Form Edge", value: recentTeamEdge },
+    { label: "Pitcher Season Edge", value: pitcherEdge },
+    { label: "Pitcher Recent Form Edge", value: pitcherRecentEdge },
+    { label: "Rest / Bullpen Edge", value: fatigueEdge },
+
     { label: "Win % Edge", value: f.winPct },
     { label: "Home/Away Edge", value: f.homeAway },
     { label: "Scoring Edge", value: f.rpg },
     { label: "Run Prevention Edge", value: f.rapg },
     { label: "Run Differential Edge", value: f.runDiff },
-    { label: "Pitcher Edge", value: pitcherEdge },
-    { label: "Recent Form Edge", value: f.recentForm },
-    { label: "Head-to-Head Edge", value: f.h2h }
+
+    { label: "Last 7 Form Edge", value: f.recent7WinPct },
+    { label: "Last 15 Form Edge", value: f.recent15WinPct },
+    { label: "Last 30 Form Edge", value: f.recent30WinPct },
+    { label: "Recent Offense Edge", value: f.recent7Runs },
+    { label: "Recent Defense Edge", value: f.recent7Prevent },
+    { label: "Recent Run Diff Edge", value: f.recentRunDiff },
+    { label: "Streak Edge", value: f.streakEdge },
+
+    { label: "Starter ERA Edge", value: f.pitcherEra },
+    { label: "Starter WHIP Edge", value: f.pitcherWhip },
+    { label: "Starter K Edge", value: f.pitcherStrikeouts },
+    { label: "Starter Recent ERA Edge", value: f.pitcherRecentEra },
+    { label: "Starter Recent WHIP Edge", value: f.pitcherRecentWhip },
+    { label: "Starter Recent K Edge", value: f.pitcherRecentK },
+
+    { label: "Head-to-Head Edge", value: f.h2h },
+    { label: "Rest-Day Edge", value: f.restEdge },
+    { label: "Bullpen Fatigue Edge", value: f.bullpenFatigue }
   ];
 }
 
@@ -825,39 +878,74 @@ function pickQualityData(game, pred) {
 
   const confidence = Number(pred.confidence || 0);
   const summary = strengthSummaryData(game, pred);
+  const f = pred.features || {};
 
-  if (confidence >= 72 && summary.score >= 5 && summary.against <= 1) {
+  const recentPower = combinedEdge([
+    f.recent7WinPct,
+    f.recent15WinPct,
+    f.recent7Runs,
+    f.recent7Prevent,
+    f.recentRunDiff
+  ]);
+
+  const pitcherPower = combinedEdge([
+    f.pitcherEra,
+    f.pitcherWhip,
+    f.pitcherRecentEra,
+    f.pitcherRecentWhip
+  ]);
+
+  const hasRecentSupport = Math.abs(Number(recentPower || 0)) >= 0.12;
+  const hasPitcherSupport = Math.abs(Number(pitcherPower || 0)) >= 0.1;
+
+  if (
+    confidence >= 74 &&
+    summary.score >= 8 &&
+    summary.against <= 2 &&
+    hasRecentSupport &&
+    hasPitcherSupport
+  ) {
     return {
       key: "elite",
       label: "🏆 Elite Edge",
-      detail: "High confidence with most matchup edges supporting the pick.",
+      detail: "High confidence with season, recent form, and pitcher data lining up together.",
       className: "qualityElite"
     };
   }
 
-  if (confidence >= 68 && summary.score >= 3) {
+  if (
+    confidence >= 68 &&
+    summary.score >= 5 &&
+    summary.against <= 4
+  ) {
     return {
       key: "strong",
       label: "🔥 Strong Edge",
-      detail: "Strong confidence with a clear edge advantage.",
+      detail: "Strong confidence with more advanced factors supporting than against.",
       className: "qualityStrong"
     };
   }
 
-  if (confidence >= 60 && summary.score >= 2) {
+  if (
+    confidence >= 60 &&
+    summary.score >= 3
+  ) {
     return {
       key: "good",
       label: "✅ Good Edge",
-      detail: "Good confidence with more edges supporting than against.",
+      detail: "Good calculated edge with several matchup factors supporting the pick.",
       className: "qualityGood"
     };
   }
 
-  if (confidence >= 54 && summary.score >= 0) {
+  if (
+    confidence >= 54 &&
+    summary.score >= 0
+  ) {
     return {
       key: "lean",
       label: "⚠️ Lean",
-      detail: "Small edge. Useful to watch, but not a dominant matchup.",
+      detail: "Small edge. Watchable, but not a dominant matchup.",
       className: "qualityLean"
     };
   }
@@ -865,7 +953,7 @@ function pickQualityData(game, pred) {
   return {
     key: "risky",
     label: "🧊 Risky / Toss Up",
-    detail: "Low edge separation or too many close/unknown factors.",
+    detail: "Low separation, mixed factors, or not enough strong support.",
     className: "qualityRisky"
   };
 }
@@ -970,7 +1058,10 @@ function edgeClass(text) {
     t.includes("stronger") ||
     t.includes("scores more") ||
     t.includes("fewer") ||
-    t.includes("edge")
+    t.includes("edge") ||
+    t.includes("form") ||
+    t.includes("pitcher") ||
+    t.includes("bullpen")
   ) {
     return "good";
   }
@@ -1093,7 +1184,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
             <div class="edgeList">
               ${strengthBadge(pred)}
               ${lockBadge(pred)}
-              ${reasons.slice(0, 5).map(reason => `
+              ${reasons.slice(0, 7).map(reason => `
                 <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
               `).join("")}
             </div>
@@ -1141,33 +1232,33 @@ function renderMatchups() {
 
         <div class="factorGrid">
           <div class="factor">
-            <span>Win % Edge</span>
-            <strong>${escapeHtml(edgeWinner(f.winPct, game))}</strong>
+            <span>Season Edge</span>
+            <strong>${escapeHtml(edgeWinner(combinedEdge([f.winPct, f.homeAway, f.rpg, f.rapg, f.runDiff]), game))}</strong>
           </div>
 
           <div class="factor">
-            <span>Home/Away Edge</span>
-            <strong>${escapeHtml(edgeWinner(f.homeAway, game))}</strong>
+            <span>Recent Form</span>
+            <strong>${escapeHtml(edgeWinner(combinedEdge([f.recent7WinPct, f.recent15WinPct, f.recent7Runs, f.recent7Prevent, f.recentRunDiff]), game))}</strong>
           </div>
 
           <div class="factor">
-            <span>Scoring Edge</span>
-            <strong>${escapeHtml(edgeWinner(f.rpg, game))}</strong>
-          </div>
-
-          <div class="factor">
-            <span>Run Prevention</span>
-            <strong>${escapeHtml(edgeWinner(f.rapg, game))}</strong>
-          </div>
-
-          <div class="factor">
-            <span>Run Diff</span>
-            <strong>${escapeHtml(edgeValue(f.runDiff))}</strong>
-          </div>
-
-          <div class="factor">
-            <span>Pitcher Edge</span>
+            <span>Pitcher Season</span>
             <strong>${escapeHtml(edgeWinner(combinedEdge([f.pitcherEra, f.pitcherWhip, f.pitcherStrikeouts]), game))}</strong>
+          </div>
+
+          <div class="factor">
+            <span>Pitcher Recent</span>
+            <strong>${escapeHtml(edgeWinner(combinedEdge([f.pitcherRecentEra, f.pitcherRecentWhip, f.pitcherRecentK]), game))}</strong>
+          </div>
+
+          <div class="factor">
+            <span>Rest / Bullpen</span>
+            <strong>${escapeHtml(edgeWinner(combinedEdge([f.restEdge, f.bullpenFatigue]), game))}</strong>
+          </div>
+
+          <div class="factor">
+            <span>Head-to-Head</span>
+            <strong>${escapeHtml(edgeWinner(f.h2h, game))}</strong>
           </div>
         </div>
 
@@ -1212,7 +1303,7 @@ function renderTeams() {
         <td>${escapeHtml(number(s.runsPerGame, 2))}</td>
         <td>${escapeHtml(number(s.runsAllowedPerGame, 2))}</td>
         <td>${escapeHtml(number(s.runDiffPerGame, 2))}</td>
-        <td>${escapeHtml(s.last10 || s.streak || "--")}</td>
+        <td>${escapeHtml(s.last7 || s.last10 || s.streak || "--")}</td>
       </tr>
     `;
   }).join("");
@@ -1249,7 +1340,7 @@ function renderAutoSources() {
           ${strengthBadge(pred)}
           ${lockBadge(pred)}
           ${reasons.length ? reasons.map(reason => `
-            <span class="edgeChip good">${escapeHtml(reason)}</span>
+            <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
           `).join("") : `<span class="edgeChip warn">Waiting for calculated edges</span>`}
         </div>
 
@@ -1258,7 +1349,7 @@ function renderAutoSources() {
 
         ${refs.length ? `
           <div class="factorGrid">
-            ${refs.slice(0, 6).map(ref => `
+            ${refs.slice(0, 10).map(ref => `
               <div class="factor">
                 <span>${escapeHtml(ref.title || ref.dataType || "Auto Factor")}</span>
                 <strong>${escapeHtml(ref.edgeTeamName || "Close")}</strong>
@@ -1270,9 +1361,10 @@ function renderAutoSources() {
         ${confidenceBreakdown(game, pred)}
 
         <p>
-          Auto inputs used: schedule, team record, home/away split, runs scored,
-          runs allowed, run differential, probable pitchers, recent form,
-          head-to-head history, previous results, and stored model learning.
+          Auto inputs used: schedule, team record, home/away split, scoring trends,
+          run prevention, run differential, probable pitchers, starter recent form,
+          recent team form, head-to-head history, rest days, bullpen fatigue estimate,
+          previous results, and stored model learning.
         </p>
       </article>
     `;
@@ -1306,7 +1398,7 @@ function renderResults() {
 
     const countedBadge = result
       ? `<span class="edgeChip ${counted ? "good" : "warn"}">
-          ${counted ? "Counted in accuracy" : "Late-created / excluded"}
+          ${counted ? "Counted in accuracy" : "Training / excluded"}
         </span>`
       : "";
 
