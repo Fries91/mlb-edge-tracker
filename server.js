@@ -1996,6 +1996,80 @@ function autoTuneWeightsFromFactorReport(db) {
   });
 }
 
+function predictionDateMs(pred) {
+  const rawDate =
+    pred.result?.finalAt ||
+    pred.date ||
+    pred.gameDate ||
+    pred.updatedAt ||
+    pred.createdAt;
+
+  const time = new Date(rawDate).getTime();
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+function rollingWindowAccuracy(db, days) {
+  const now = Date.now();
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+
+  const counted = (db.predictions || []).filter(pred => {
+    if (!pred.result) return false;
+    if (pred.result.counted !== true) return false;
+    if (!pred.qualified) return false;
+
+    return predictionDateMs(pred) >= cutoff;
+  });
+
+  const correct = counted.filter(pred => pred.result.correct).length;
+  const total = counted.length;
+  const wrong = total - correct;
+
+  return {
+    days,
+    accuracy: total ? Math.round((correct / total) * 100) : null,
+    correct,
+    wrong,
+    total
+  };
+}
+
+function rollingAccuracyStats(db) {
+  const last7 = rollingWindowAccuracy(db, 7);
+  const last14 = rollingWindowAccuracy(db, 14);
+  const last30 = rollingWindowAccuracy(db, 30);
+
+  let trendStatus = "Learning";
+  let trendDirection = "flat";
+
+  if (last7.total >= 5 && last14.total >= 10) {
+    if ((last7.accuracy || 0) >= (last14.accuracy || 0) + 5) {
+      trendStatus = "Improving";
+      trendDirection = "up";
+    } else if ((last7.accuracy || 0) <= (last14.accuracy || 0) - 5) {
+      trendStatus = "Cooling Off";
+      trendDirection = "down";
+    } else {
+      trendStatus = "Stable";
+      trendDirection = "flat";
+    }
+  }
+
+  if (last7.total < 3 && last14.total < 6) {
+    trendStatus = "Need More Recent Finals";
+    trendDirection = "learning";
+  }
+
+  return {
+    last7,
+    last14,
+    last30,
+    trendStatus,
+    trendDirection,
+    updatedAt: new Date().toISOString()
+  };
+}
+
 function accuracyStats(db) {
   const graded = db.predictions.filter(pred => pred.result);
   const counted = graded.filter(pred => pred.result.counted === true);
@@ -2055,6 +2129,7 @@ function buildDashboard(db) {
     teams,
     predictions,
     accuracy: accuracyStats(db),
+    rollingAccuracy: rollingAccuracyStats(db),
     model: db.model,
     logs: db.logs || [],
     factorReport: db.meta.factorReport || {},
