@@ -10,40 +10,43 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const DB_FILE = path.join(DATA_DIR, "mlb-edge-db.json");
 const MLB_API = "https://statsapi.mlb.com/api/v1";
 
-const FRONTEND_URL = "/";
+const ENGINE_VERSION = "qualified-picks-v1";
 const SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const PITCHER_CACHE_MS = 6 * 60 * 60 * 1000;
 const HISTORY_DAYS = 120;
 const BACKTEST_TRAINING_LIMIT = 420;
-const LEARN_RATE = 0.028;
+const LEARN_RATE = 0.024;
 
 const DEFAULT_WEIGHTS = {
-  bias: 0.04,
+  bias: 0.035,
 
-  winPct: 0.7,
-  homeAway: 0.45,
-  rpg: 0.55,
-  rapg: 0.58,
-  runDiff: 0.72,
+  winPct: 0.62,
+  homeAway: 0.38,
+  rpg: 0.48,
+  rapg: 0.52,
+  runDiff: 0.65,
 
   recent7WinPct: 0.62,
-  recent15WinPct: 0.48,
-  recent30WinPct: 0.35,
+  recent15WinPct: 0.5,
+  recent30WinPct: 0.32,
   recent7Runs: 0.42,
-  recent7Prevent: 0.44,
-  recentRunDiff: 0.5,
-  streakEdge: 0.18,
+  recent7Prevent: 0.45,
+  recentRunDiff: 0.52,
+  streakEdge: 0.14,
 
-  pitcherEra: 0.38,
-  pitcherWhip: 0.32,
-  pitcherStrikeouts: 0.18,
+  pitcherEra: 0.36,
+  pitcherWhip: 0.31,
+  pitcherStrikeouts: 0.16,
   pitcherRecentEra: 0.42,
   pitcherRecentWhip: 0.34,
-  pitcherRecentK: 0.18,
+  pitcherRecentK: 0.16,
 
-  h2h: 0.16,
-  restEdge: 0.2,
-  bullpenFatigue: 0.28
+  handednessSplit: 0.22,
+  lineupStrength: 0.28,
+
+  h2h: 0.1,
+  restEdge: 0.18,
+  bullpenFatigue: 0.26
 };
 
 function ensureDataDir() {
@@ -62,7 +65,9 @@ function defaultDb() {
       lastTrainedAt: null
     },
     logs: [],
-    meta: {}
+    meta: {
+      engineVersion: ENGINE_VERSION
+    }
   };
 }
 
@@ -86,6 +91,26 @@ function normalizeDb(db) {
     logs: Array.isArray(clean.logs) ? clean.logs : [],
     meta: clean.meta || {}
   };
+}
+
+function maybeUpgradeEngine(db) {
+  if (db.meta?.engineVersion === ENGINE_VERSION) return false;
+
+  db.predictions = [];
+  db.model = {
+    weights: { ...DEFAULT_WEIGHTS },
+    trainedGames: 0,
+    lastTrainedAt: null
+  };
+
+  db.meta = {
+    ...(db.meta || {}),
+    engineVersion: ENGINE_VERSION,
+    engineResetAt: new Date().toISOString()
+  };
+
+  logMessage(db, `Engine upgraded to ${ENGINE_VERSION}. Old predictions and weights reset.`);
+  return true;
 }
 
 function readDb() {
@@ -118,8 +143,7 @@ function logMessage(db, message) {
     at: new Date().toISOString(),
     message
   });
-
-  db.logs = db.logs.slice(0, 100);
+  db.logs = db.logs.slice(0, 120);
 }
 
 function clamp(value, min, max) {
@@ -194,7 +218,6 @@ function parseInnings(value) {
   const partial = Number(partialRaw || 0);
 
   if (!Number.isFinite(whole)) return 0;
-
   if (partial === 1) return whole + 1 / 3;
   if (partial === 2) return whole + 2 / 3;
 
@@ -202,34 +225,83 @@ function parseInnings(value) {
 }
 
 async function syncMlbTeams(db) {
-  try {
-    const data = await fetchJson(mlb("/teams?sportId=1"));
-    const teams = data.teams || [];
+  const data = await fetchJson(mlb("/teams?sportId=1"));
+  const teams = data.teams || [];
 
-    teams.forEach(team => {
-      const id = String(team.id);
-      db.teams[id] = {
-        ...(db.teams[id] || {}),
-        id: team.id,
-        name: team.name,
-        abbreviation: team.abbreviation || "",
-        stats: db.teams[id]?.stats || emptyStats()
-      };
-    });
-  } catch (error) {
-    logMessage(db, `Team sync skipped: ${error.message}`);
-  }
+  teams.forEach(team => {
+    const id = String(team.id);
+
+    db.teams[id] = {
+      ...(db.teams[id] || {}),
+      id: team.id,
+      name: team.name,
+      abbreviation: team.abbreviation || "",
+      stats: db.teams[id]?.stats || emptyStats(),
+      battingSplits: db.teams[id]?.battingSplits || null
+    };
+  });
+}
+
+async function syncTeamBattingSplits(db) {
+  const season = currentSeason();
+  const teams = Object.values(db.teams || {});
+
+  await Promise.all(
+    teams.map(async team => {
+      try {
+        const url = mlb(`/teams/${team.id}/stats?stats=season&group=hitting&season=${season}&splits=pitchingHand`);
+        const data = await fetchJson(url, 18000);
+        const splits = data?.stats?.[0]?.splits || [];
+
+        const parsed = {
+          R: null,
+          L: null
+        };
+
+        splits.forEach(split => {
+          const stat = split.stat || {};
+          const splitText = JSON.stringify(split.split || {}).toLowerCase();
+          const ops = toNumber(stat.ops, null);
+          const obp = toNumber(stat.obp, null);
+          const slg = toNumber(stat.slg, null);
+          const usableOps = ops != null ? ops : obp != null && slg != null ? obp + slg : null;
+
+          if (usableOps == null) return;
+
+          if (splitText.includes("right") || splitText.includes("\"r\"")) {
+            parsed.R = {
+              ops: usableOps,
+              avg: toNumber(stat.avg, null),
+              runs: toNumber(stat.runs, null)
+            };
+          }
+
+          if (splitText.includes("left") || splitText.includes("\"l\"")) {
+            parsed.L = {
+              ops: usableOps,
+              avg: toNumber(stat.avg, null),
+              runs: toNumber(stat.runs, null)
+            };
+          }
+        });
+
+        db.teams[String(team.id)].battingSplits = parsed;
+      } catch {
+        // If split data is not available, the model simply ignores this factor.
+      }
+    })
+  );
 }
 
 async function fetchScheduleByDate(date) {
-  const url = mlb(`/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team,linescore`);
+  const url = mlb(`/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team,linescore,weather`);
   const data = await fetchJson(url);
   return flattenSchedule(data).map(normalizeGame).filter(Boolean);
 }
 
 async function fetchScheduleRange(startDate, endDate) {
-  const url = mlb(`/schedule?sportId=1&startDate=${startDate}&endDate=${endDate}&hydrate=probablePitcher,team,linescore`);
-  const data = await fetchJson(url, 40000);
+  const url = mlb(`/schedule?sportId=1&startDate=${startDate}&endDate=${endDate}&hydrate=probablePitcher,team,linescore,weather`);
+  const data = await fetchJson(url, 45000);
   return flattenSchedule(data).map(normalizeGame).filter(Boolean);
 }
 
@@ -244,6 +316,7 @@ function normalizePitcher(pitcher) {
   return {
     id: pitcher.id || null,
     name: pitcher.fullName || pitcher.name || "TBD",
+    pitchHand: pitcher.pitchHand?.code || pitcher.pitchHand || null,
     era: null,
     whip: null,
     strikeOuts: null,
@@ -253,6 +326,31 @@ function normalizePitcher(pitcher) {
     recentWhip: null,
     recentKPerGame: null,
     recentGamesUsed: 0
+  };
+}
+
+function normalizeWeather(weather) {
+  if (!weather) {
+    return {
+      condition: null,
+      tempF: null,
+      windMph: null,
+      raw: null
+    };
+  }
+
+  const raw = JSON.stringify(weather);
+  const tempText = String(weather.temp || weather.temperature || "");
+  const windText = String(weather.wind || "");
+
+  const tempMatch = tempText.match(/-?\d+/);
+  const windMatch = windText.match(/-?\d+/);
+
+  return {
+    condition: weather.condition || weather.conditions || null,
+    tempF: tempMatch ? Number(tempMatch[0]) : null,
+    windMph: windMatch ? Number(windMatch[0]) : null,
+    raw
   };
 }
 
@@ -275,6 +373,7 @@ function normalizeGame(raw) {
     officialDate: raw.officialDate || ymd(raw.gameDate),
     status: raw.status?.detailedState || raw.status?.abstractGameState || "Scheduled",
     venue: raw.venue?.name || "MLB",
+    weather: normalizeWeather(raw.weather),
     awayTeamId: away.team.id,
     awayTeamName: away.team.name,
     homeTeamId: home.team.id,
@@ -283,7 +382,9 @@ function normalizeGame(raw) {
     homeScore: homeScore == null ? null : Number(homeScore),
     inningCount,
     awayPitcher: normalizePitcher(away.probablePitcher),
-    homePitcher: normalizePitcher(home.probablePitcher)
+    homePitcher: normalizePitcher(home.probablePitcher),
+    awayLineup: null,
+    homeLineup: null
   };
 }
 
@@ -335,6 +436,7 @@ async function getPitcherStats(id, db, season) {
   }
 
   const baseStats = {
+    pitchHand: null,
     era: null,
     whip: null,
     strikeOuts: null,
@@ -345,6 +447,17 @@ async function getPitcherStats(id, db, season) {
     recentKPerGame: null,
     recentGamesUsed: 0
   };
+
+  try {
+    const personData = await fetchJson(mlb(`/people/${id}`), 15000);
+    const person = personData?.people?.[0];
+
+    if (person?.pitchHand?.code) {
+      baseStats.pitchHand = person.pitchHand.code;
+    }
+  } catch {
+    // Optional.
+  }
 
   try {
     const seasonUrl = mlb(`/people/${id}/stats?stats=season&group=pitching&season=${season}`);
@@ -408,6 +521,71 @@ async function getPitcherStats(id, db, season) {
   return baseStats;
 }
 
+async function hydrateLineups(games) {
+  await Promise.all(
+    games.map(async game => {
+      try {
+        const data = await fetchJson(mlb(`/game/${game.gamePk}/boxscore`), 18000);
+
+        game.awayLineup = parseLineup(data?.teams?.away);
+        game.homeLineup = parseLineup(data?.teams?.home);
+      } catch {
+        game.awayLineup = null;
+        game.homeLineup = null;
+      }
+    })
+  );
+}
+
+function parseLineup(teamBox) {
+  if (!teamBox || !teamBox.players) return null;
+
+  const playerIds = Object.keys(teamBox.players);
+  const batters = [];
+
+  playerIds.forEach(key => {
+    const player = teamBox.players[key];
+    const battingOrder = player?.battingOrder;
+
+    if (!battingOrder) return;
+
+    const stat = player?.seasonStats?.batting || {};
+    const ops = toNumber(stat.ops, null);
+    const obp = toNumber(stat.obp, null);
+    const slg = toNumber(stat.slg, null);
+    const usableOps = ops != null ? ops : obp != null && slg != null ? obp + slg : null;
+
+    batters.push({
+      name: player?.person?.fullName || "Batter",
+      battingOrder: Number(battingOrder),
+      ops: usableOps
+    });
+  });
+
+  const ordered = batters
+    .filter(batter => Number.isFinite(batter.battingOrder))
+    .sort((a, b) => a.battingOrder - b.battingOrder)
+    .slice(0, 9);
+
+  const opsValues = ordered
+    .map(batter => batter.ops)
+    .filter(value => Number.isFinite(value));
+
+  if (!ordered.length || opsValues.length < 6) {
+    return {
+      announced: false,
+      hitters: ordered,
+      avgOps: null
+    };
+  }
+
+  return {
+    announced: true,
+    hitters: ordered,
+    avgOps: opsValues.reduce((sum, value) => sum + value, 0) / opsValues.length
+  };
+}
+
 function emptyStats() {
   return {
     played: 0,
@@ -441,6 +619,7 @@ function initTeamRecord(team) {
     id: team.id,
     name: team.name,
     abbreviation: team.abbreviation || "",
+    battingSplits: team.battingSplits || null,
     stats: {
       played: 0,
       wins: 0,
@@ -519,7 +698,11 @@ function buildTeamStats(db, recentGames) {
 
   Object.values(records).forEach(record => {
     record.stats = finalizeTeamStats(record.stats);
-    db.teams[String(record.id)] = record;
+
+    db.teams[String(record.id)] = {
+      ...(db.teams[String(record.id)] || {}),
+      ...record
+    };
   });
 }
 
@@ -639,7 +822,6 @@ function normalizedPitcherEraEdge(homePitcher, awayPitcher) {
   const awayEra = toNumber(awayPitcher?.era, null);
 
   if (homeEra == null || awayEra == null) return 0;
-
   return clamp((awayEra - homeEra) / 6, -1, 1);
 }
 
@@ -648,7 +830,6 @@ function normalizedPitcherWhipEdge(homePitcher, awayPitcher) {
   const awayWhip = toNumber(awayPitcher?.whip, null);
 
   if (homeWhip == null || awayWhip == null) return 0;
-
   return clamp((awayWhip - homeWhip) / 2, -1, 1);
 }
 
@@ -657,7 +838,6 @@ function normalizedPitcherStrikeoutEdge(homePitcher, awayPitcher) {
   const awayK = toNumber(awayPitcher?.kPerGame, null);
 
   if (homeK == null || awayK == null) return 0;
-
   return clamp((homeK - awayK) / 12, -1, 1);
 }
 
@@ -666,7 +846,6 @@ function normalizedPitcherRecentEraEdge(homePitcher, awayPitcher) {
   const awayEra = toNumber(awayPitcher?.recentEra, null);
 
   if (homeEra == null || awayEra == null) return 0;
-
   return clamp((awayEra - homeEra) / 6, -1, 1);
 }
 
@@ -675,7 +854,6 @@ function normalizedPitcherRecentWhipEdge(homePitcher, awayPitcher) {
   const awayWhip = toNumber(awayPitcher?.recentWhip, null);
 
   if (homeWhip == null || awayWhip == null) return 0;
-
   return clamp((awayWhip - homeWhip) / 2, -1, 1);
 }
 
@@ -684,8 +862,31 @@ function normalizedPitcherRecentKEdge(homePitcher, awayPitcher) {
   const awayK = toNumber(awayPitcher?.recentKPerGame, null);
 
   if (homeK == null || awayK == null) return 0;
-
   return clamp((homeK - awayK) / 12, -1, 1);
+}
+
+function handednessSplitFeature(game, db) {
+  const homePitchHand = game.homePitcher?.pitchHand;
+  const awayPitchHand = game.awayPitcher?.pitchHand;
+
+  const homeSplit = db.teams?.[String(game.homeTeamId)]?.battingSplits?.[awayPitchHand];
+  const awaySplit = db.teams?.[String(game.awayTeamId)]?.battingSplits?.[homePitchHand];
+
+  const homeOps = toNumber(homeSplit?.ops, null);
+  const awayOps = toNumber(awaySplit?.ops, null);
+
+  if (homeOps == null || awayOps == null) return 0;
+
+  return clamp((homeOps - awayOps) / 0.35, -1, 1);
+}
+
+function lineupStrengthFeature(game) {
+  const homeOps = toNumber(game.homeLineup?.avgOps, null);
+  const awayOps = toNumber(game.awayLineup?.avgOps, null);
+
+  if (homeOps == null || awayOps == null) return 0;
+
+  return clamp((homeOps - awayOps) / 0.35, -1, 1);
 }
 
 function h2hFeature(homeTeamId, awayTeamId, db) {
@@ -703,8 +904,7 @@ function h2hFeature(homeTeamId, awayTeamId, db) {
   let awayWins = 0;
 
   games.forEach(game => {
-    const homeSideWon = game.homeScore > game.awayScore;
-    const actualWinnerId = homeSideWon ? game.homeTeamId : game.awayTeamId;
+    const actualWinnerId = game.homeScore > game.awayScore ? game.homeTeamId : game.awayTeamId;
 
     if (String(actualWinnerId) === String(homeTeamId)) homeWins += 1;
     if (String(actualWinnerId) === String(awayTeamId)) awayWins += 1;
@@ -718,7 +918,6 @@ function daysBetween(a, b) {
   const two = new Date(`${b}T12:00:00Z`).getTime();
 
   if (!Number.isFinite(one) || !Number.isFinite(two)) return 0;
-
   return Math.round((two - one) / (24 * 60 * 60 * 1000));
 }
 
@@ -803,6 +1002,23 @@ function parkRunAdjustment(venue, db) {
   return clamp((venueAvg - leagueAvg) / 4, -0.7, 0.7);
 }
 
+function weatherRunAdjustment(weather) {
+  if (!weather) return 0;
+
+  let boost = 0;
+
+  const temp = toNumber(weather.tempF, null);
+  const wind = toNumber(weather.windMph, null);
+  const condition = String(weather.condition || "").toLowerCase();
+
+  if (temp != null && temp >= 82) boost += 0.15;
+  if (temp != null && temp <= 50) boost -= 0.12;
+  if (wind != null && wind >= 12) boost += 0.08;
+  if (condition.includes("rain") || condition.includes("drizzle")) boost -= 0.1;
+
+  return clamp(boost, -0.35, 0.35);
+}
+
 function calculateFeatures(game, db) {
   const home = teamStats(db, game.homeTeamId);
   const away = teamStats(db, game.awayTeamId);
@@ -836,6 +1052,9 @@ function calculateFeatures(game, db) {
     pitcherRecentWhip: normalizedPitcherRecentWhipEdge(game.homePitcher, game.awayPitcher),
     pitcherRecentK: normalizedPitcherRecentKEdge(game.homePitcher, game.awayPitcher),
 
+    handednessSplit: handednessSplitFeature(game, db),
+    lineupStrength: lineupStrengthFeature(game),
+
     h2h: h2hFeature(game.homeTeamId, game.awayTeamId, db),
     restEdge: clamp((homeRest - awayRest) / 5, -1, 1),
     bullpenFatigue: clamp(awayFatigue - homeFatigue, -1, 1)
@@ -852,12 +1071,88 @@ function weightedScore(features, weights) {
   return score;
 }
 
+function supportSummary(features, pickHome) {
+  let support = 0;
+  let against = 0;
+  let close = 0;
+
+  Object.entries(features).forEach(([key, value]) => {
+    const n = Number(value || 0);
+    if (Math.abs(n) < 0.04) {
+      close += 1;
+      return;
+    }
+
+    const supportsHome = n > 0;
+
+    if (supportsHome === pickHome) support += 1;
+    else against += 1;
+  });
+
+  return {
+    support,
+    against,
+    close,
+    edgeScore: support - against
+  };
+}
+
+function qualifyPrediction(confidence, summary, game, features) {
+  const missingPitchers = !game.homePitcher?.id || !game.awayPitcher?.id;
+  const lineupKnown = Boolean(game.homeLineup?.announced && game.awayLineup?.announced);
+  const strongLineupAgainst =
+    Math.abs(features.lineupStrength || 0) >= 0.35 &&
+    ((features.lineupStrength > 0 && summary.edgeScore < 0) || (features.lineupStrength < 0 && summary.edgeScore > 0));
+
+  if (confidence < 58) {
+    return {
+      qualified: false,
+      reason: "No Pick: confidence below 58%"
+    };
+  }
+
+  if (summary.edgeScore < 2) {
+    return {
+      qualified: false,
+      reason: "No Pick: not enough edge separation"
+    };
+  }
+
+  if (summary.against > summary.support) {
+    return {
+      qualified: false,
+      reason: "No Pick: too many factors disagree"
+    };
+  }
+
+  if (missingPitchers && confidence < 66) {
+    return {
+      qualified: false,
+      reason: "No Pick: probable pitcher data missing"
+    };
+  }
+
+  if (strongLineupAgainst && lineupKnown) {
+    return {
+      qualified: false,
+      reason: "No Pick: announced lineup pushes against the model"
+    };
+  }
+
+  return {
+    qualified: true,
+    reason: "Qualified Pick"
+  };
+}
+
 function edgeTeam(value, game) {
   if (Math.abs(value || 0) < 0.035) return "Close";
   return value > 0 ? game.homeTeamName : game.awayTeamName;
 }
 
-function buildReasons(game, features) {
+function buildReasons(game, features, qualifiedInfo) {
+  if (!qualifiedInfo.qualified) return [qualifiedInfo.reason];
+
   const map = [
     ["winPct", "season win-rate edge"],
     ["homeAway", "home/away split edge"],
@@ -880,6 +1175,9 @@ function buildReasons(game, features) {
     ["pitcherRecentWhip", "recent starter WHIP edge"],
     ["pitcherRecentK", "recent starter strikeout edge"],
 
+    ["handednessSplit", "batting split edge"],
+    ["lineupStrength", "announced lineup edge"],
+
     ["h2h", "head-to-head edge"],
     ["restEdge", "rest-day edge"],
     ["bullpenFatigue", "bullpen fatigue edge"]
@@ -894,10 +1192,10 @@ function buildReasons(game, features) {
     }))
     .filter(item => item.team !== "Close")
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-    .slice(0, 7)
+    .slice(0, 8)
     .map(item => `${item.team} ${item.label}`);
 
-  return reasons.length ? reasons : ["Very close matchup"];
+  return reasons.length ? reasons : ["Qualified Pick: small but clear edge"];
 }
 
 function buildSourceReferences(game, features) {
@@ -915,16 +1213,16 @@ function projectedScores(game, db, pickHome) {
   const leagueRuns = 4.4;
 
   const homeOffense =
-    ((home.runsPerGame || leagueRuns) * 0.48) +
-    ((home.last7RunsPerGame || leagueRuns) * 0.32) +
-    ((home.last15RunDiffPerGame || 0) * 0.2) +
-    leagueRuns * 0.2;
+    ((home.runsPerGame || leagueRuns) * 0.44) +
+    ((home.last7RunsPerGame || leagueRuns) * 0.36) +
+    ((home.last15RunDiffPerGame || 0) * 0.12) +
+    leagueRuns * 0.18;
 
   const awayOffense =
-    ((away.runsPerGame || leagueRuns) * 0.48) +
-    ((away.last7RunsPerGame || leagueRuns) * 0.32) +
-    ((away.last15RunDiffPerGame || 0) * 0.2) +
-    leagueRuns * 0.2;
+    ((away.runsPerGame || leagueRuns) * 0.44) +
+    ((away.last7RunsPerGame || leagueRuns) * 0.36) +
+    ((away.last15RunDiffPerGame || 0) * 0.12) +
+    leagueRuns * 0.18;
 
   const homeDefense =
     ((home.runsAllowedPerGame || leagueRuns) * 0.55) +
@@ -948,20 +1246,23 @@ function projectedScores(game, db, pickHome) {
   if (awayRecentEra != null) homeExpected += clamp((awayRecentEra - 4.2) * 0.1, -0.5, 0.5);
   if (homeRecentEra != null) awayExpected += clamp((homeRecentEra - 4.2) * 0.1, -0.5, 0.5);
 
+  const homeLineupOps = toNumber(game.homeLineup?.avgOps, null);
+  const awayLineupOps = toNumber(game.awayLineup?.avgOps, null);
+
+  if (homeLineupOps != null) homeExpected += clamp((homeLineupOps - 0.72) * 1.4, -0.6, 0.6);
+  if (awayLineupOps != null) awayExpected += clamp((awayLineupOps - 0.72) * 1.4, -0.6, 0.6);
+
   const park = parkRunAdjustment(game.venue, db);
-  homeExpected += park / 2;
-  awayExpected += park / 2;
+  const weather = weatherRunAdjustment(game.weather);
+
+  homeExpected += park / 2 + weather / 2;
+  awayExpected += park / 2 + weather / 2;
 
   let homeScore = clamp(Math.round(homeExpected), 1, 12);
   let awayScore = clamp(Math.round(awayExpected), 1, 12);
 
-  if (pickHome && homeScore <= awayScore) {
-    homeScore = awayScore + 1;
-  }
-
-  if (!pickHome && awayScore <= homeScore) {
-    awayScore = homeScore + 1;
-  }
+  if (pickHome && homeScore <= awayScore) homeScore = awayScore + 1;
+  if (!pickHome && awayScore <= homeScore) awayScore = homeScore + 1;
 
   return {
     projectedHomeScore: clamp(homeScore, 1, 13),
@@ -973,13 +1274,15 @@ function calculatePrediction(game, db) {
   const features = calculateFeatures(game, db);
   const score = weightedScore(features, db.model.weights);
   const pickHome = score >= 0;
+  const summary = supportSummary(features, pickHome);
 
   const confidence = clamp(
-    Math.round(50 + Math.tanh(Math.abs(score) * 1.65) * 36),
+    Math.round(50 + Math.tanh(Math.abs(score) * 1.55) * 36),
     51,
     86
   );
 
+  const qualifiedInfo = qualifyPrediction(confidence, summary, game, features);
   const scores = projectedScores(game, db, pickHome);
 
   return {
@@ -991,14 +1294,23 @@ function calculatePrediction(game, db) {
     awayTeamName: game.awayTeamName,
     homeTeamId: game.homeTeamId,
     homeTeamName: game.homeTeamName,
-    predictedWinnerTeamId: pickHome ? game.homeTeamId : game.awayTeamId,
-    predictedWinnerName: pickHome ? game.homeTeamName : game.awayTeamName,
+
+    predictedWinnerTeamId: qualifiedInfo.qualified ? (pickHome ? game.homeTeamId : game.awayTeamId) : null,
+    predictedWinnerName: qualifiedInfo.qualified ? (pickHome ? game.homeTeamName : game.awayTeamName) : "No Pick / Too Close",
+
     confidence,
+    qualified: qualifiedInfo.qualified,
+    noPick: !qualifiedInfo.qualified,
+    noPickReason: qualifiedInfo.qualified ? null : qualifiedInfo.reason,
+    supportSummary: summary,
+
     projectedHomeScore: scores.projectedHomeScore,
     projectedAwayScore: scores.projectedAwayScore,
+
     features,
-    reasons: buildReasons(game, features),
+    reasons: buildReasons(game, features, qualifiedInfo),
     sourceReferences: buildSourceReferences(game, features),
+
     locked: false,
     lateCreated: false,
     historicalTraining: false,
@@ -1022,7 +1334,6 @@ function hasGameStarted(game) {
   }
 
   const start = new Date(game.gameDate).getTime();
-
   if (!Number.isFinite(start)) return false;
 
   return Date.now() >= start;
@@ -1058,13 +1369,24 @@ function upsertPrediction(game, db) {
     updatedAt: new Date().toISOString()
   };
 
-  if (index >= 0) {
-    db.predictions[index] = prediction;
-  } else {
-    db.predictions.push(prediction);
-  }
+  if (index >= 0) db.predictions[index] = prediction;
+  else db.predictions.push(prediction);
 
   return prediction;
+}
+
+function buildTrainingDbForDate(db, finalGames, date) {
+  const trainingDb = normalizeDb({
+    ...db,
+    teams: JSON.parse(JSON.stringify(db.teams || {})),
+    predictions: [],
+    recentGames: finalGames.filter(game => String(game.officialDate) < String(date)),
+    model: db.model,
+    logs: []
+  });
+
+  buildTeamStats(trainingDb, trainingDb.recentGames);
+  return trainingDb;
 }
 
 function backfillHistoricalTraining(db, finalGames) {
@@ -1078,11 +1400,11 @@ function backfillHistoricalTraining(db, finalGames) {
 
   games.forEach(game => {
     const exists = db.predictions.find(pred => String(pred.gamePk) === String(game.gamePk));
-
     if (exists) return;
 
+    const trainingDb = buildTrainingDbForDate(db, finalGames, game.officialDate);
     const prediction = {
-      ...calculatePrediction(game, db),
+      ...calculatePrediction(game, trainingDb),
       locked: true,
       lateCreated: false,
       historicalTraining: true,
@@ -1135,8 +1457,8 @@ function gradePredictions(db, finalGames) {
         ? finalGame.homeTeamName
         : finalGame.awayTeamName;
 
-    const correct = String(actualWinnerTeamId) === String(pred.predictedWinnerTeamId);
-    const counted = !pred.lateCreated && !pred.historicalTraining;
+    const correct = pred.qualified && String(actualWinnerTeamId) === String(pred.predictedWinnerTeamId);
+    const counted = Boolean(pred.qualified && !pred.lateCreated && !pred.historicalTraining);
 
     pred.locked = true;
     pred.result = {
@@ -1153,22 +1475,18 @@ function gradePredictions(db, finalGames) {
 
     trainPrediction(db, pred);
   });
+
+  db.meta.factorReport = buildFactorReport(db);
+  autoTuneWeightsFromFactorReport(db);
 }
 
 function trainPrediction(db, pred) {
   if (!pred.result) return;
   if (pred.result.trained) return;
-
-  if (pred.result.counted === false && !pred.historicalTraining) return;
+  if (!pred.qualified) return;
 
   const actualHomeSign =
     String(pred.result.actualWinnerTeamId) === String(pred.homeTeamId) ? 1 : -1;
-
-  const predictedHomeSign =
-    String(pred.predictedWinnerTeamId) === String(pred.homeTeamId) ? 1 : -1;
-
-  const wasWrong = actualHomeSign !== predictedHomeSign;
-  const direction = wasWrong ? actualHomeSign : predictedHomeSign;
 
   const weights = db.model.weights;
 
@@ -1176,22 +1494,91 @@ function trainPrediction(db, pred) {
     if (key === "bias") return;
 
     const featureValue = Number(pred.features?.[key] || 0);
-    const adjustment = LEARN_RATE * direction * featureValue;
+    const adjustment = LEARN_RATE * actualHomeSign * featureValue;
 
-    weights[key] = clamp((weights[key] || 0) + adjustment, -2.5, 2.5);
+    weights[key] = clamp((weights[key] || 0) + adjustment, -2.2, 2.2);
   });
 
-  weights.bias = clamp((weights.bias || 0) + LEARN_RATE * actualHomeSign * 0.04, -0.5, 0.5);
+  weights.bias = clamp((weights.bias || 0) + LEARN_RATE * actualHomeSign * 0.035, -0.45, 0.45);
 
   pred.result.trained = true;
   db.model.trainedGames = db.predictions.filter(item => item.result?.trained).length;
   db.model.lastTrainedAt = new Date().toISOString();
 }
 
+function buildFactorReport(db) {
+  const report = {};
+
+  Object.keys(DEFAULT_WEIGHTS).forEach(key => {
+    if (key !== "bias") {
+      report[key] = {
+        supports: 0,
+        correctWhenSupported: 0,
+        wrongWhenSupported: 0,
+        accuracyWhenSupported: null
+      };
+    }
+  });
+
+  db.predictions
+    .filter(pred => pred.qualified && pred.result)
+    .forEach(pred => {
+      const pickHome = String(pred.predictedWinnerTeamId) === String(pred.homeTeamId);
+
+      Object.keys(report).forEach(key => {
+        const value = Number(pred.features?.[key] || 0);
+
+        if (Math.abs(value) < 0.04) return;
+
+        const supportsHome = value > 0;
+        const supportedPick = supportsHome === pickHome;
+
+        if (!supportedPick) return;
+
+        report[key].supports += 1;
+
+        if (pred.result.correct) report[key].correctWhenSupported += 1;
+        else report[key].wrongWhenSupported += 1;
+      });
+    });
+
+  Object.keys(report).forEach(key => {
+    const item = report[key];
+
+    if (item.supports) {
+      item.accuracyWhenSupported = Math.round((item.correctWhenSupported / item.supports) * 100);
+    }
+  });
+
+  return report;
+}
+
+function autoTuneWeightsFromFactorReport(db) {
+  const report = db.meta?.factorReport || {};
+  const weights = db.model.weights || {};
+
+  Object.entries(report).forEach(([key, item]) => {
+    if (!weights[key]) return;
+    if (!item.supports || item.supports < 10) return;
+
+    const acc = item.correctWhenSupported / item.supports;
+
+    if (acc < 0.46) {
+      weights[key] = clamp(weights[key] * 0.9, -2.2, 2.2);
+    } else if (acc < 0.5) {
+      weights[key] = clamp(weights[key] * 0.95, -2.2, 2.2);
+    } else if (acc >= 0.6) {
+      weights[key] = clamp(weights[key] * 1.04, -2.2, 2.2);
+    } else if (acc >= 0.56) {
+      weights[key] = clamp(weights[key] * 1.02, -2.2, 2.2);
+    }
+  });
+}
+
 function accuracyStats(db) {
   const graded = db.predictions.filter(pred => pred.result);
-  const counted = graded.filter(pred => pred.result.counted !== false);
-  const excluded = graded.filter(pred => pred.result.counted === false);
+  const counted = graded.filter(pred => pred.result.counted === true);
+  const excluded = graded.filter(pred => pred.result.counted !== true);
   const correct = counted.filter(pred => pred.result.correct);
 
   return {
@@ -1211,12 +1598,12 @@ function cleanupDb(db) {
       if (dateCompare !== 0) return dateCompare;
       return Number(b.confidence || 0) - Number(a.confidence || 0);
     })
-    .slice(0, 1000);
+    .slice(0, 1200);
 
   db.recentGames = db.recentGames
     .slice()
     .sort((a, b) => String(b.officialDate || "").localeCompare(String(a.officialDate || "")))
-    .slice(0, 2800);
+    .slice(0, 3000);
 }
 
 function buildDashboard(db) {
@@ -1248,18 +1635,22 @@ function buildDashboard(db) {
     predictions,
     accuracy: accuracyStats(db),
     model: db.model,
-    logs: db.logs || []
+    logs: db.logs || [],
+    factorReport: db.meta.factorReport || {},
+    engineVersion: ENGINE_VERSION
   };
 }
 
 async function fullAutoSync() {
   const db = readDb();
+  maybeUpgradeEngine(db);
 
   const today = ymd();
   const tomorrow = addDays(today, 1);
   const startDate = addDays(today, -HISTORY_DAYS);
 
   await syncMlbTeams(db);
+  await syncTeamBattingSplits(db);
 
   const recentGames = await fetchScheduleRange(startDate, today);
   const finalRecentGames = recentGames.filter(isFinalGame);
@@ -1275,6 +1666,7 @@ async function fullAutoSync() {
   const tomorrowGames = await fetchScheduleByDate(tomorrow);
 
   await hydratePitchers([...todayGames, ...tomorrowGames], db);
+  await hydrateLineups([...todayGames, ...tomorrowGames]);
 
   syncPredictionsForGames([...todayGames, ...tomorrowGames], db);
   gradePredictions(db, [...finalRecentGames, ...todayGames, ...tomorrowGames]);
@@ -1284,6 +1676,7 @@ async function fullAutoSync() {
 
   db.meta = {
     ...(db.meta || {}),
+    engineVersion: ENGINE_VERSION,
     currentDate: today,
     tomorrowDate: tomorrow,
     todayGames: todayWithPredictions,
@@ -1291,14 +1684,20 @@ async function fullAutoSync() {
     lastFullSync: new Date().toISOString(),
     dataDir: DATA_DIR,
     historyDays: HISTORY_DAYS,
-    addedHistoricalTraining: addedTraining
+    addedHistoricalTraining: addedTraining,
+    qualifiedPickMode: true
   };
 
   cleanupDb(db);
+
+  const qualifiedToday = todayWithPredictions.filter(game => game.prediction?.qualified).length;
+  const qualifiedTomorrow = tomorrowWithPredictions.filter(game => game.prediction?.qualified).length;
+
   logMessage(
     db,
-    `Accuracy engine sync complete: ${todayGames.length} today, ${tomorrowGames.length} tomorrow, ${finalRecentGames.length} history games, ${addedTraining} new training games.`
+    `Qualified sync complete: ${qualifiedToday}/${todayGames.length} today, ${qualifiedTomorrow}/${tomorrowGames.length} tomorrow, ${finalRecentGames.length} history games, ${addedTraining} new training games.`
   );
+
   saveDb(db);
 
   return buildDashboard(db);
@@ -1369,6 +1768,7 @@ function serveStatic(req, res, url) {
 async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/dashboard") {
     const db = readDb();
+
     sendJson(res, 200, {
       ok: true,
       dashboard: buildDashboard(db)
@@ -1378,6 +1778,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/sync") {
     const dashboard = await fullAutoSync();
+
     sendJson(res, 200, {
       ok: true,
       dashboard
@@ -1387,9 +1788,34 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/recalculate") {
     const dashboard = await fullAutoSync();
+
     sendJson(res, 200, {
       ok: true,
       message: "Recalculated from latest automatic data.",
+      dashboard
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/reset-retrain") {
+    const db = readDb();
+
+    db.predictions = [];
+    db.model = {
+      weights: { ...DEFAULT_WEIGHTS },
+      trainedGames: 0,
+      lastTrainedAt: null
+    };
+    db.meta.engineVersion = ENGINE_VERSION;
+
+    logMessage(db, "Manual reset + retrain requested.");
+    saveDb(db);
+
+    const dashboard = await fullAutoSync();
+
+    sendJson(res, 200, {
+      ok: true,
+      message: "Model reset and retrained.",
       dashboard
     });
     return;
@@ -1454,7 +1880,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`MLB Edge Tracker running on port ${PORT}`);
   console.log(`Data directory: ${DATA_DIR}`);
-  console.log(`Open: ${FRONTEND_URL}`);
+  console.log(`Engine: ${ENGINE_VERSION}`);
 });
 
 fullAutoSync().catch(error => {
