@@ -911,6 +911,7 @@ function render() {
   renderDataHealth();
   renderQualityAccuracy();
   renderRollingAccuracy();
+  renderConfidenceTierBacktest();
   renderSafetyMonitor();
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
@@ -1096,6 +1097,121 @@ function renderRollingAccuracy() {
   const trendIcon = rollingTrendIcon(rolling.trendDirection);
   setText("#rollingTrend", `${trendIcon} ${rolling.trendStatus || "Learning"}`);
   setText("#rollingUpdated", rolling.updatedAt ? formatClock(rolling.updatedAt) : "--");
+}
+
+function emptyTier(label, min, max) {
+  return {
+    label,
+    min,
+    max,
+    correct: 0,
+    wrong: 0,
+    total: 0,
+    accuracy: null
+  };
+}
+
+function confidenceTierBacktestData() {
+  const tiers = {
+    tier70: emptyTier("70%+", 70, 100),
+    tier65: emptyTier("65–69%", 65, 69),
+    tier60: emptyTier("60–64%", 60, 64),
+    tier55: emptyTier("55–59%", 55, 59),
+    tierBelow55: emptyTier("Below 55%", 0, 54)
+  };
+
+  const predictions = state?.predictions || [];
+
+  predictions.forEach(pred => {
+    if (!pred.result) return;
+    if (pred.result.counted !== true) return;
+    if (pred.qualified === false || pred.noPick === true) return;
+
+    const confidence = calibratedConfidence(pred, pred);
+
+    let tier = null;
+
+    if (confidence >= 70) tier = tiers.tier70;
+    else if (confidence >= 65) tier = tiers.tier65;
+    else if (confidence >= 60) tier = tiers.tier60;
+    else if (confidence >= 55) tier = tiers.tier55;
+    else tier = tiers.tierBelow55;
+
+    tier.total += 1;
+
+    if (pred.result.correct) tier.correct += 1;
+    else tier.wrong += 1;
+  });
+
+  Object.values(tiers).forEach(tier => {
+    tier.accuracy = tier.total
+      ? Math.round((tier.correct / tier.total) * 100)
+      : null;
+  });
+
+  return tiers;
+}
+
+function tierAccuracyText(tier) {
+  if (!tier || tier.accuracy == null) return "--";
+  return `${tier.accuracy}%`;
+}
+
+function tierRecordText(tier) {
+  if (!tier || !tier.total) return "0/0";
+  return `${tier.correct}/${tier.total}`;
+}
+
+function tierLabelWithAccuracy(tier) {
+  if (!tier || tier.accuracy == null) return "--";
+  return `${tier.label} ${tier.accuracy}%`;
+}
+
+function renderConfidenceTierBacktest() {
+  const tiers = confidenceTierBacktestData();
+  const tierList = Object.values(tiers).filter(tier => tier.total > 0);
+
+  const matureTiers = tierList.filter(tier => tier.total >= 5);
+
+  const bestTier = matureTiers
+    .slice()
+    .sort((a, b) => {
+      if (b.accuracy !== a.accuracy) return b.accuracy - a.accuracy;
+      return b.total - a.total;
+    })[0];
+
+  const weakestTier = matureTiers
+    .slice()
+    .sort((a, b) => {
+      if (a.accuracy !== b.accuracy) return a.accuracy - b.accuracy;
+      return b.total - a.total;
+    })[0];
+
+  const totalSample = tierList.reduce((sum, tier) => sum + tier.total, 0);
+
+  let status = "Learning";
+
+  if (totalSample >= 30) status = "Active";
+  if (totalSample >= 75) status = "Strong Sample";
+  if (totalSample < 10) status = "Need More Finals";
+
+  setText("#tierBest", tierLabelWithAccuracy(bestTier));
+  setText("#tierWeakest", tierLabelWithAccuracy(weakestTier));
+
+  setText("#tier70", tierAccuracyText(tiers.tier70));
+  setText("#tier70Record", tierRecordText(tiers.tier70));
+
+  setText("#tier65", tierAccuracyText(tiers.tier65));
+  setText("#tier65Record", tierRecordText(tiers.tier65));
+
+  setText("#tier60", tierAccuracyText(tiers.tier60));
+  setText("#tier60Record", tierRecordText(tiers.tier60));
+
+  setText("#tier55", tierAccuracyText(tiers.tier55));
+  setText("#tier55Record", tierRecordText(tiers.tier55));
+
+  setText("#tierBelow55", tierAccuracyText(tiers.tierBelow55));
+  setText("#tierStatus", status);
 }
 
 function average(values) {
