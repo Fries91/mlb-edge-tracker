@@ -10,12 +10,17 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const DB_FILE = path.join(DATA_DIR, "mlb-edge-db.json");
 const MLB_API = "https://statsapi.mlb.com/api/v1";
 
-const ENGINE_VERSION = "qualified-picks-optimizer-v1";
+const ENGINE_VERSION = "qualified-picks-optimizer-factortrust-v1";
 const SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const PITCHER_CACHE_MS = 6 * 60 * 60 * 1000;
 const HISTORY_DAYS = 120;
 const BACKTEST_TRAINING_LIMIT = 420;
 const LEARN_RATE = 0.024;
+
+const FACTOR_TRUST_MIN_SUPPORT = 10;
+const FACTOR_MUTE_ACCURACY = 46;
+const FACTOR_REDUCE_ACCURACY = 50;
+const FACTOR_BOOST_ACCURACY = 60;
 
 const DEFAULT_QUALIFY_RULES = {
   minConfidence: 58,
@@ -60,6 +65,26 @@ const DEFAULT_WEIGHTS = {
   bullpenFatigue: 0.26
 };
 
+function defaultFactorTrust() {
+  const trust = {};
+
+  Object.keys(DEFAULT_WEIGHTS).forEach(key => {
+    if (key === "bias") return;
+
+    trust[key] = {
+      trust: 1,
+      muted: false,
+      status: "Learning",
+      supports: 0,
+      correct: 0,
+      wrong: 0,
+      accuracy: null
+    };
+  });
+
+  return trust;
+}
+
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -78,7 +103,10 @@ function defaultDb() {
     logs: [],
     meta: {
       engineVersion: ENGINE_VERSION,
-      optimizedRules: { ...DEFAULT_QUALIFY_RULES }
+      optimizedRules: { ...DEFAULT_QUALIFY_RULES },
+      factorTrust: defaultFactorTrust(),
+      mutedFactors: [],
+      factorTrustReport: null
     }
   };
 }
@@ -106,7 +134,12 @@ function normalizeDb(db) {
       optimizedRules: {
         ...DEFAULT_QUALIFY_RULES,
         ...((clean.meta && clean.meta.optimizedRules) || {})
-      }
+      },
+      factorTrust: {
+        ...defaultFactorTrust(),
+        ...((clean.meta && clean.meta.factorTrust) || {})
+      },
+      mutedFactors: Array.isArray(clean.meta?.mutedFactors) ? clean.meta.mutedFactors : []
     }
   };
 }
@@ -136,6 +169,9 @@ function maybeUpgradeEngine(db) {
     optimizedRules: { ...DEFAULT_QUALIFY_RULES },
     optimizerReport: null,
     factorReport: {},
+    factorTrust: defaultFactorTrust(),
+    mutedFactors: [],
+    factorTrustReport: null,
     engineResetAt: new Date().toISOString()
   };
 
@@ -838,6 +874,33 @@ function teamStats(db, id) {
   return db.teams?.[String(id)]?.stats || emptyStats();
 }
 
+function factorTrustInfo(db, key) {
+  return db.meta?.factorTrust?.[key] || defaultFactorTrust()[key] || {
+    trust: 1,
+    muted: false
+  };
+}
+
+function isFactorMuted(db, key) {
+  return Boolean(factorTrustInfo(db, key)?.muted);
+}
+
+function effectiveWeight(db, key) {
+  const base = Number(db.model?.weights?.[key] || 0);
+
+  if (key === "bias") return base;
+
+  const info = factorTrustInfo(db, key);
+
+  if (info.muted) return 0;
+
+  const trust = Number(info.trust);
+
+  if (!Number.isFinite(trust)) return base;
+
+  return base * clamp(trust, 0, 1.25);
+}
+
 function normalizedPitcherEraEdge(homePitcher, awayPitcher) {
   const homeEra = toNumber(homePitcher?.era, null);
   const awayEra = toNumber(awayPitcher?.era, null);
@@ -1082,22 +1145,27 @@ function calculateFeatures(game, db) {
   };
 }
 
-function weightedScore(features, weights) {
-  let score = weights.bias || 0;
+function weightedScore(features, db) {
+  let score = effectiveWeight(db, "bias");
 
   Object.keys(features).forEach(key => {
-    score += (weights[key] || 0) * (features[key] || 0);
+    score += effectiveWeight(db, key) * (features[key] || 0);
   });
 
   return score;
 }
 
-function supportSummary(features, pickHome) {
+function supportSummary(features, pickHome, db) {
   let support = 0;
   let against = 0;
   let close = 0;
 
   Object.entries(features).forEach(([key, value]) => {
+    if (isFactorMuted(db, key)) {
+      close += 1;
+      return;
+    }
+
     const n = Number(value || 0);
 
     if (Math.abs(n) < 0.04) {
@@ -1397,7 +1465,7 @@ function edgeTeam(value, game) {
   return value > 0 ? game.homeTeamName : game.awayTeamName;
 }
 
-function buildReasons(game, features, qualifiedInfo) {
+function buildReasons(game, features, qualifiedInfo, db) {
   if (!qualifiedInfo.qualified) return [qualifiedInfo.reason];
 
   const map = [
@@ -1431,6 +1499,7 @@ function buildReasons(game, features, qualifiedInfo) {
   ];
 
   const reasons = map
+    .filter(([key]) => !isFactorMuted(db, key))
     .map(([key, label]) => ({
       key,
       label,
@@ -1445,13 +1514,20 @@ function buildReasons(game, features, qualifiedInfo) {
   return reasons.length ? reasons : ["Optimized Qualified Pick"];
 }
 
-function buildSourceReferences(game, features) {
-  return Object.entries(features).map(([key, value]) => ({
-    title: key,
-    dataType: "calculated",
-    value,
-    edgeTeamName: edgeTeam(value, game)
-  }));
+function buildSourceReferences(game, features, db) {
+  return Object.entries(features).map(([key, value]) => {
+    const info = factorTrustInfo(db, key);
+
+    return {
+      title: key,
+      dataType: "calculated",
+      value,
+      edgeTeamName: edgeTeam(value, game),
+      trust: info.trust,
+      muted: info.muted,
+      trustStatus: info.status
+    };
+  });
 }
 
 function projectedScores(game, db, pickHome) {
@@ -1519,9 +1595,9 @@ function projectedScores(game, db, pickHome) {
 
 function calculatePrediction(game, db) {
   const features = calculateFeatures(game, db);
-  const score = weightedScore(features, db.model.weights);
+  const score = weightedScore(features, db);
   const pickHome = score >= 0;
-  const summary = supportSummary(features, pickHome);
+  const summary = supportSummary(features, pickHome, db);
 
   const confidence = clamp(
     Math.round(50 + Math.tanh(Math.abs(score) * 1.55) * 36),
@@ -1559,8 +1635,8 @@ function calculatePrediction(game, db) {
     projectedAwayScore: scores.projectedAwayScore,
 
     features,
-    reasons: buildReasons(game, features, qualifiedInfo),
-    sourceReferences: buildSourceReferences(game, features),
+    reasons: buildReasons(game, features, qualifiedInfo, db),
+    sourceReferences: buildSourceReferences(game, features, db),
 
     locked: false,
     lateCreated: false,
@@ -1731,6 +1807,7 @@ function gradePredictions(db, finalGames) {
   });
 
   db.meta.factorReport = buildFactorReport(db);
+  updateFactorTrustFromReport(db);
   autoTuneWeightsFromFactorReport(db);
 }
 
@@ -1807,6 +1884,94 @@ function buildFactorReport(db) {
   return report;
 }
 
+function updateFactorTrustFromReport(db) {
+  const report = db.meta?.factorReport || {};
+  const trust = defaultFactorTrust();
+
+  const mutedFactors = [];
+  const reducedFactors = [];
+  const boostedFactors = [];
+  const learningFactors = [];
+
+  Object.keys(trust).forEach(key => {
+    const item = report[key] || {};
+    const supports = Number(item.supports || 0);
+    const correct = Number(item.correctWhenSupported || 0);
+    const wrong = Number(item.wrongWhenSupported || 0);
+    const accuracy = Number(item.accuracyWhenSupported);
+
+    let status = "Learning";
+    let trustScore = 1;
+    let muted = false;
+
+    if (supports < FACTOR_TRUST_MIN_SUPPORT || !Number.isFinite(accuracy)) {
+      status = "Learning";
+      trustScore = 1;
+      muted = false;
+      learningFactors.push(key);
+    } else if (accuracy < FACTOR_MUTE_ACCURACY) {
+      status = "Muted";
+      trustScore = 0;
+      muted = true;
+      mutedFactors.push(key);
+    } else if (accuracy < FACTOR_REDUCE_ACCURACY) {
+      status = "Reduced";
+      trustScore = 0.45;
+      muted = false;
+      reducedFactors.push(key);
+    } else if (accuracy < 54) {
+      status = "Cautious";
+      trustScore = 0.75;
+      muted = false;
+      reducedFactors.push(key);
+    } else if (accuracy >= 64) {
+      status = "Boosted";
+      trustScore = 1.18;
+      muted = false;
+      boostedFactors.push(key);
+    } else if (accuracy >= FACTOR_BOOST_ACCURACY) {
+      status = "Trusted";
+      trustScore = 1.08;
+      muted = false;
+      boostedFactors.push(key);
+    } else {
+      status = "Normal";
+      trustScore = 1;
+      muted = false;
+    }
+
+    trust[key] = {
+      trust: trustScore,
+      muted,
+      status,
+      supports,
+      correct,
+      wrong,
+      accuracy: Number.isFinite(accuracy) ? accuracy : null
+    };
+  });
+
+  db.meta.factorTrust = trust;
+  db.meta.mutedFactors = mutedFactors;
+  db.meta.factorTrustReport = {
+    updatedAt: new Date().toISOString(),
+    minSupport: FACTOR_TRUST_MIN_SUPPORT,
+    muteBelowAccuracy: FACTOR_MUTE_ACCURACY,
+    reduceBelowAccuracy: FACTOR_REDUCE_ACCURACY,
+    boostAtAccuracy: FACTOR_BOOST_ACCURACY,
+    mutedFactors,
+    reducedFactors,
+    boostedFactors,
+    learningFactors,
+    mutedCount: mutedFactors.length,
+    reducedCount: reducedFactors.length,
+    boostedCount: boostedFactors.length,
+    learningCount: learningFactors.length
+  };
+
+  return db.meta.factorTrustReport;
+}
+
 function autoTuneWeightsFromFactorReport(db) {
   const report = db.meta?.factorReport || {};
   const weights = db.model.weights || {};
@@ -1818,13 +1983,15 @@ function autoTuneWeightsFromFactorReport(db) {
     const acc = item.correctWhenSupported / item.supports;
 
     if (acc < 0.46) {
-      weights[key] = clamp(weights[key] * 0.9, -2.2, 2.2);
+      weights[key] = clamp(weights[key] * 0.88, -2.2, 2.2);
     } else if (acc < 0.5) {
-      weights[key] = clamp(weights[key] * 0.95, -2.2, 2.2);
+      weights[key] = clamp(weights[key] * 0.93, -2.2, 2.2);
+    } else if (acc >= 0.64) {
+      weights[key] = clamp(weights[key] * 1.05, -2.2, 2.2);
     } else if (acc >= 0.6) {
-      weights[key] = clamp(weights[key] * 1.04, -2.2, 2.2);
+      weights[key] = clamp(weights[key] * 1.03, -2.2, 2.2);
     } else if (acc >= 0.56) {
-      weights[key] = clamp(weights[key] * 1.02, -2.2, 2.2);
+      weights[key] = clamp(weights[key] * 1.015, -2.2, 2.2);
     }
   });
 }
@@ -1891,6 +2058,9 @@ function buildDashboard(db) {
     model: db.model,
     logs: db.logs || [],
     factorReport: db.meta.factorReport || {},
+    factorTrust: db.meta.factorTrust || defaultFactorTrust(),
+    factorTrustReport: db.meta.factorTrustReport || null,
+    mutedFactors: db.meta.mutedFactors || [],
     optimizerReport: db.meta.optimizerReport || null,
     optimizedRules: db.meta.optimizedRules || DEFAULT_QUALIFY_RULES,
     engineVersion: ENGINE_VERSION
@@ -1955,10 +2125,11 @@ async function fullAutoSync() {
 
   const qualifiedToday = todayWithPredictions.filter(game => game.prediction?.qualified).length;
   const qualifiedTomorrow = tomorrowWithPredictions.filter(game => game.prediction?.qualified).length;
+  const mutedCount = db.meta?.mutedFactors?.length || 0;
 
   logMessage(
     db,
-    `Qualified sync complete: ${qualifiedToday}/${todayGames.length} today, ${qualifiedTomorrow}/${tomorrowGames.length} tomorrow, ${finalRecentGames.length} history games, ${addedTraining} new training games.`
+    `Factor trust sync complete: ${qualifiedToday}/${todayGames.length} today, ${qualifiedTomorrow}/${tomorrowGames.length} tomorrow, ${mutedCount} muted factors, ${addedTraining} new training games.`
   );
 
   saveDb(db);
@@ -2074,7 +2245,10 @@ async function handleApi(req, res, url) {
       engineVersion: ENGINE_VERSION,
       optimizedRules: { ...DEFAULT_QUALIFY_RULES },
       optimizerReport: null,
-      factorReport: {}
+      factorReport: {},
+      factorTrust: defaultFactorTrust(),
+      mutedFactors: [],
+      factorTrustReport: null
     };
 
     logMessage(db, "Manual reset + retrain requested.");
@@ -2106,6 +2280,30 @@ async function handleApi(req, res, url) {
       message: "Backtest optimizer complete.",
       optimizedRules: rules,
       optimizerReport: db.meta.optimizerReport || null,
+      dashboard: buildDashboard(db)
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/factor-trust") {
+    const db = readDb();
+
+    db.meta.factorReport = buildFactorReport(db);
+    const factorTrustReport = updateFactorTrustFromReport(db);
+
+    logMessage(
+      db,
+      `Manual factor trust run: ${factorTrustReport.mutedCount} muted, ${factorTrustReport.reducedCount} reduced, ${factorTrustReport.boostedCount} boosted.`
+    );
+
+    saveDb(db);
+
+    sendJson(res, 200, {
+      ok: true,
+      message: "Factor trust report rebuilt.",
+      factorTrust: db.meta.factorTrust,
+      mutedFactors: db.meta.mutedFactors,
+      factorTrustReport,
       dashboard: buildDashboard(db)
     });
     return;
