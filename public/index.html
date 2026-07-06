@@ -421,7 +421,7 @@
       <div class="panelHeader">
         <div>
           <h2>Model</h2>
-          <p>Learning report, optimizer rules, and current weights.</p>
+          <p>Learning report, optimizer rules, factor accuracy, and current weights.</p>
         </div>
 
         <a class="exportLink" href="/api/export">Export DB</a>
@@ -544,6 +544,49 @@
         </div>
       </div>
 
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Factor Accuracy Report</h2>
+            <p>Shows which signals are helping the model and which ones may be hurting it.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard">
+            <span>Best Signal</span>
+            <strong id="factorBestSignal">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Weakest Signal</span>
+            <strong id="factorWeakSignal">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Tracked Factors</span>
+            <strong id="factorTracked">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Strong Signals</span>
+            <strong id="factorStrongSignals">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Weak Signals</span>
+            <strong id="factorWeakSignals">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Total Supports</span>
+            <strong id="factorSample">--</strong>
+          </div>
+        </div>
+
+        <div id="factorAccuracyList" class="weightsGrid"></div>
+      </div>
+
       <div class="sectionTitle">
         <h3>Model Weights</h3>
         <p>Higher values mean the model is trusting that factor more.</p>
@@ -584,8 +627,8 @@
         </div>
 
         <div class="helpCard">
-          <h3>Accuracy</h3>
-          <p>Only qualified picks count. No Pick, late-created, and historical training games are excluded.</p>
+          <h3>Factor Report</h3>
+          <p>Shows which signals are helping or hurting the model, such as pitchers, form, scoring, and bullpen fatigue.</p>
         </div>
       </div>
     </section>
