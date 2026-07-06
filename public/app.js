@@ -16,6 +16,36 @@ let qualityCalibrationCache = null;
 const FRONTEND_SYNC_MS = 15 * 60 * 1000;
 const CACHE_KEY = "mlb-edge-dashboard-cache";
 
+const FACTOR_LABELS = {
+  winPct: "Season Win %",
+  homeAway: "Home/Away Split",
+  rpg: "Scoring",
+  rapg: "Run Prevention",
+  runDiff: "Run Differential",
+
+  recent7WinPct: "Last 7 Form",
+  recent15WinPct: "Last 15 Form",
+  recent30WinPct: "Last 30 Form",
+  recent7Runs: "Recent Offense",
+  recent7Prevent: "Recent Defense",
+  recentRunDiff: "Recent Run Diff",
+  streakEdge: "Streak",
+
+  pitcherEra: "Starter ERA",
+  pitcherWhip: "Starter WHIP",
+  pitcherStrikeouts: "Starter Strikeouts",
+  pitcherRecentEra: "Recent Starter ERA",
+  pitcherRecentWhip: "Recent Starter WHIP",
+  pitcherRecentK: "Recent Starter K",
+
+  handednessSplit: "Batting Splits",
+  lineupStrength: "Lineup Strength",
+
+  h2h: "Head-to-Head",
+  restEdge: "Rest Days",
+  bullpenFatigue: "Bullpen Fatigue"
+};
+
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
 
@@ -131,6 +161,10 @@ function setStatus(text, mode = "ready") {
   renderSafetyMonitor();
 }
 
+function factorLabel(key) {
+  return FACTOR_LABELS[key] || key;
+}
+
 function qualityRank(key) {
   const ranks = {
     elite: 5,
@@ -154,37 +188,10 @@ function rankToQualityKey(rank) {
 }
 
 function qualityMeta(key) {
-  if (key === "elite") {
-    return {
-      key,
-      label: "🏆 Elite Edge",
-      className: "qualityElite"
-    };
-  }
-
-  if (key === "strong") {
-    return {
-      key,
-      label: "🔥 Strong Edge",
-      className: "qualityStrong"
-    };
-  }
-
-  if (key === "good") {
-    return {
-      key,
-      label: "✅ Good Edge",
-      className: "qualityGood"
-    };
-  }
-
-  if (key === "lean") {
-    return {
-      key,
-      label: "⚠️ Lean",
-      className: "qualityLean"
-    };
-  }
+  if (key === "elite") return { key, label: "🏆 Elite Edge", className: "qualityElite" };
+  if (key === "strong") return { key, label: "🔥 Strong Edge", className: "qualityStrong" };
+  if (key === "good") return { key, label: "✅ Good Edge", className: "qualityGood" };
+  if (key === "lean") return { key, label: "⚠️ Lean", className: "qualityLean" };
 
   return {
     key: "risky",
@@ -223,10 +230,7 @@ function sortFilterLabel() {
 }
 
 async function getJson(url) {
-  const res = await fetch(url, {
-    cache: "no-store"
-  });
-
+  const res = await fetch(url, { cache: "no-store" });
   const data = await res.json();
 
   if (!res.ok || data.ok === false) {
@@ -332,7 +336,6 @@ function setupBestFilters() {
 
 function setupInstallButton() {
   const installBtn = $("#installBtn");
-
   if (!installBtn) return;
 
   window.addEventListener("beforeinstallprompt", event => {
@@ -395,11 +398,9 @@ function edgeWinner(value, game) {
 
 function edgeValue(value) {
   const n = Number(value);
-
   if (!Number.isFinite(n)) return "--";
 
   const sign = n > 0 ? "+" : "";
-
   return `${sign}${number(n, 3)}`;
 }
 
@@ -408,26 +409,9 @@ function getPredictionEdges(game, pred) {
 
   const f = pred.features || {};
 
-  const pitcherEdge = combinedEdge([
-    f.pitcherEra,
-    f.pitcherWhip,
-    f.pitcherStrikeouts
-  ]);
-
-  const pitcherRecentEdge = combinedEdge([
-    f.pitcherRecentEra,
-    f.pitcherRecentWhip,
-    f.pitcherRecentK
-  ]);
-
-  const seasonEdge = combinedEdge([
-    f.winPct,
-    f.homeAway,
-    f.rpg,
-    f.rapg,
-    f.runDiff
-  ]);
-
+  const pitcherEdge = combinedEdge([f.pitcherEra, f.pitcherWhip, f.pitcherStrikeouts]);
+  const pitcherRecentEdge = combinedEdge([f.pitcherRecentEra, f.pitcherRecentWhip, f.pitcherRecentK]);
+  const seasonEdge = combinedEdge([f.winPct, f.homeAway, f.rpg, f.rapg, f.runDiff]);
   const recentTeamEdge = combinedEdge([
     f.recent7WinPct,
     f.recent15WinPct,
@@ -437,11 +421,7 @@ function getPredictionEdges(game, pred) {
     f.recentRunDiff,
     f.streakEdge
   ]);
-
-  const fatigueEdge = combinedEdge([
-    f.restEdge,
-    f.bullpenFatigue
-  ]);
+  const fatigueEdge = combinedEdge([f.restEdge, f.bullpenFatigue]);
 
   return [
     { label: "Overall Season Edge", value: seasonEdge },
@@ -516,13 +496,7 @@ function strengthSummaryData(game, pred) {
     ? Math.max(5, Math.min(100, Math.round(((score + total) / (total * 2)) * 100)))
     : 50;
 
-  return {
-    support,
-    against,
-    close,
-    score,
-    fill
-  };
+  return { support, against, close, score, fill };
 }
 
 function basePickQualityData(game, pred) {
@@ -581,11 +555,7 @@ function basePickQualityData(game, pred) {
     };
   }
 
-  if (
-    confidence >= 68 &&
-    summary.score >= 5 &&
-    summary.against <= 4
-  ) {
+  if (confidence >= 68 && summary.score >= 5 && summary.against <= 4) {
     return {
       key: "strong",
       label: "🔥 Strong Edge",
@@ -594,10 +564,7 @@ function basePickQualityData(game, pred) {
     };
   }
 
-  if (
-    confidence >= 60 &&
-    summary.score >= 3
-  ) {
+  if (confidence >= 60 && summary.score >= 3) {
     return {
       key: "good",
       label: "✅ Good Edge",
@@ -606,10 +573,7 @@ function basePickQualityData(game, pred) {
     };
   }
 
-  if (
-    confidence >= 54 &&
-    summary.score >= 0
-  ) {
+  if (confidence >= 54 && summary.score >= 0) {
     return {
       key: "lean",
       label: "⚠️ Lean",
@@ -651,9 +615,7 @@ function buildQualityCalibration() {
 
     buckets[key].total += 1;
 
-    if (result.correct) {
-      buckets[key].correct += 1;
-    }
+    if (result.correct) buckets[key].correct += 1;
   });
 
   const counted = Object.values(buckets).reduce((sum, bucket) => sum + bucket.total, 0);
@@ -684,15 +646,10 @@ function calibratedQualityKey(baseKey) {
   const accuracy = bucketAccuracy(bucket);
   let rank = qualityRank(baseKey);
 
-  if (accuracy < 0.48) {
-    rank -= 2;
-  } else if (accuracy < 0.55) {
-    rank -= 1;
-  } else if (accuracy >= 0.64 && bucket.total >= 8) {
-    rank += 1;
-  } else if (accuracy >= 0.60 && rank <= 2 && bucket.total >= 8) {
-    rank += 1;
-  }
+  if (accuracy < 0.48) rank -= 2;
+  else if (accuracy < 0.55) rank -= 1;
+  else if (accuracy >= 0.64 && bucket.total >= 8) rank += 1;
+  else if (accuracy >= 0.60 && rank <= 2 && bucket.total >= 8) rank += 1;
 
   return rankToQualityKey(rank);
 }
@@ -701,7 +658,6 @@ function calibratedConfidence(game, pred) {
   if (!pred) return 0;
 
   const baseConfidence = Number(pred.confidence || 0);
-
   if (!Number.isFinite(baseConfidence)) return 0;
 
   if (pred.noPick === true || pred.qualified === false) {
@@ -749,29 +705,9 @@ function pickStrength(pred, game = pred) {
 
   const c = calibratedConfidence(game, pred);
 
-  if (c >= 68) {
-    return {
-      label: "🔥 Strong Edge",
-      detail: "Highest calibrated automatic edge",
-      className: "good"
-    };
-  }
-
-  if (c >= 60) {
-    return {
-      label: "✅ Good Edge",
-      detail: "Solid calibrated edge",
-      className: "good"
-    };
-  }
-
-  if (c >= 54) {
-    return {
-      label: "⚠️ Lean",
-      detail: "Small calculated edge",
-      className: "warn"
-    };
-  }
+  if (c >= 68) return { label: "🔥 Strong Edge", detail: "Highest calibrated automatic edge", className: "good" };
+  if (c >= 60) return { label: "✅ Good Edge", detail: "Solid calibrated edge", className: "good" };
+  if (c >= 54) return { label: "⚠️ Lean", detail: "Small calculated edge", className: "warn" };
 
   return {
     label: "🧊 Toss Up",
@@ -946,6 +882,7 @@ function render() {
   renderResults();
   renderModelReport();
   renderOptimizerReport();
+  renderFactorReport();
   renderModel();
 }
 
@@ -1042,7 +979,6 @@ function qualityAccuracyText(bucket) {
   if (!bucket.total) return "--";
 
   const accuracy = Math.round((bucket.correct / bucket.total) * 100);
-
   return `${accuracy}% (${bucket.correct}/${bucket.total})`;
 }
 
@@ -1072,9 +1008,7 @@ function renderQualityAccuracy() {
     buckets[key].total += 1;
     countedGames += 1;
 
-    if (result.correct) {
-      buckets[key].correct += 1;
-    }
+    if (result.correct) buckets[key].correct += 1;
   });
 
   setText("#qualityEliteAccuracy", qualityAccuracyText(buckets.elite));
@@ -1129,9 +1063,7 @@ function renderModelReport() {
 
     buckets[key].total += 1;
 
-    if (pred.result?.correct) {
-      buckets[key].correct += 1;
-    }
+    if (pred.result?.correct) buckets[key].correct += 1;
   });
 
   let bestQuality = "--";
@@ -1190,21 +1122,107 @@ function renderOptimizerReport() {
   setText("#optimizerQualified", report.qualified ?? "--");
   setText("#optimizerAccuracy", report.accuracy == null ? "--" : `${report.accuracy}%`);
   setText("#optimizerCoverage", report.coverage == null ? "--" : `${report.coverage}%`);
-
-  setText(
-    "#optimizerConfidence",
-    activeRules.minConfidence == null ? "--" : `${activeRules.minConfidence}%`
-  );
-
-  setText(
-    "#optimizerEdge",
-    activeRules.minEdgeScore == null ? "--" : `+${activeRules.minEdgeScore}`
-  );
-
+  setText("#optimizerConfidence", activeRules.minConfidence == null ? "--" : `${activeRules.minConfidence}%`);
+  setText("#optimizerEdge", activeRules.minEdgeScore == null ? "--" : `+${activeRules.minEdgeScore}`);
   setText("#optimizerSupport", activeRules.minSupport ?? "--");
   setText("#optimizerAgainst", activeRules.maxAgainst ?? "--");
   setText("#optimizerPitcher", activeRules.requirePitcherSignal ? "Yes" : "No");
   setText("#optimizerLineup", activeRules.requireLineupSignal ? "Yes" : "No");
+}
+
+function factorStatus(item) {
+  const acc = Number(item?.accuracyWhenSupported);
+
+  if (!Number.isFinite(acc)) {
+    return { label: "Learning", className: "warn" };
+  }
+
+  if (acc >= 60) return { label: "Strong Helper", className: "good" };
+  if (acc >= 54) return { label: "Useful", className: "good" };
+  if (acc >= 50) return { label: "Neutral", className: "warn" };
+
+  return { label: "Hurting", className: "bad" };
+}
+
+function renderFactorReport() {
+  const container = $("#factorAccuracyList");
+  const report = state?.factorReport || {};
+
+  if (!container) return;
+
+  const entries = Object.entries(report)
+    .filter(([, item]) => item && Number(item.supports || 0) > 0)
+    .map(([key, item]) => ({
+      key,
+      item,
+      supports: Number(item.supports || 0),
+      correct: Number(item.correctWhenSupported || 0),
+      wrong: Number(item.wrongWhenSupported || 0),
+      accuracy: Number(item.accuracyWhenSupported)
+    }))
+    .sort((a, b) => {
+      if (b.supports !== a.supports) return b.supports - a.supports;
+      return Number(b.accuracy || 0) - Number(a.accuracy || 0);
+    });
+
+  const mature = entries.filter(entry => {
+    return entry.supports >= 10 && Number.isFinite(entry.accuracy);
+  });
+
+  const best = mature
+    .slice()
+    .sort((a, b) => b.accuracy - a.accuracy)[0];
+
+  const weakest = mature
+    .slice()
+    .sort((a, b) => a.accuracy - b.accuracy)[0];
+
+  const strongSignals = mature.filter(entry => entry.accuracy >= 58).length;
+  const weakSignals = mature.filter(entry => entry.accuracy < 50).length;
+  const totalSupports = entries.reduce((sum, entry) => sum + entry.supports, 0);
+
+  setText("#factorBestSignal", best ? `${factorLabel(best.key)} ${best.accuracy}%` : "--");
+  setText("#factorWeakSignal", weakest ? `${factorLabel(weakest.key)} ${weakest.accuracy}%` : "--");
+  setText("#factorTracked", entries.length);
+  setText("#factorStrongSignals", strongSignals);
+  setText("#factorWeakSignals", weakSignals);
+  setText("#factorSample", totalSupports);
+
+  if (!entries.length) {
+    container.innerHTML = `
+      <div class="noData">
+        No factor report yet. Run reset/retrain, optimize rules, then sync after games finish.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = entries.map(entry => {
+    const status = factorStatus(entry.item);
+    const acc = Number.isFinite(entry.accuracy) ? entry.accuracy : 0;
+    const width = Math.max(5, Math.min(100, acc));
+
+    return `
+      <div class="weightCard">
+        <div class="weightName">${escapeHtml(factorLabel(entry.key))}</div>
+
+        <div class="weightBar">
+          <div class="weightFill" style="width:${width}%;"></div>
+        </div>
+
+        <div class="weightValue">
+          ${Number.isFinite(entry.accuracy) ? `${escapeHtml(entry.accuracy)}%` : "--"}
+        </div>
+
+        <div class="edgeList">
+          <span class="edgeChip ${escapeHtml(status.className)}">${escapeHtml(status.label)}</span>
+          <span class="edgeChip good">${escapeHtml(entry.correct)} correct</span>
+          <span class="edgeChip warn">${escapeHtml(entry.wrong)} wrong</span>
+          <span class="edgeChip warn">${escapeHtml(entry.supports)} supports</span>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 function pitcherText(pitcher) {
