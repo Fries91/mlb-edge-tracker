@@ -421,7 +421,7 @@
       <div class="panelHeader">
         <div>
           <h2>Model</h2>
-          <p>Learning report, optimizer rules, factor accuracy, and current weights.</p>
+          <p>Learning report, optimizer rules, factor accuracy, factor trust, and current weights.</p>
         </div>
 
         <a class="exportLink" href="/api/export">Export DB</a>
@@ -587,6 +587,49 @@
         <div id="factorAccuracyList" class="weightsGrid"></div>
       </div>
 
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Factor Trust Control</h2>
+            <p>Shows which signals the backend is trusting, reducing, boosting, or muting.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard">
+            <span>Status</span>
+            <strong id="factorTrustStatus">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Muted</span>
+            <strong id="factorTrustMuted">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Reduced</span>
+            <strong id="factorTrustReduced">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Boosted</span>
+            <strong id="factorTrustBoosted">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Learning</span>
+            <strong id="factorTrustLearning">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Updated</span>
+            <strong id="factorTrustUpdated">--</strong>
+          </div>
+        </div>
+
+        <div id="factorTrustList" class="weightsGrid"></div>
+      </div>
+
       <div class="sectionTitle">
         <h3>Model Weights</h3>
         <p>Higher values mean the model is trusting that factor more.</p>
@@ -627,8 +670,8 @@
         </div>
 
         <div class="helpCard">
-          <h3>Factor Report</h3>
-          <p>Shows which signals are helping or hurting the model, such as pitchers, form, scoring, and bullpen fatigue.</p>
+          <h3>Factor Trust</h3>
+          <p>Shows which signals are trusted, reduced, boosted, or muted by the automatic backend.</p>
         </div>
       </div>
     </section>
