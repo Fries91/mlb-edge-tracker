@@ -945,6 +945,7 @@ function render() {
   renderAutoSources();
   renderResults();
   renderModelReport();
+  renderOptimizerReport();
   renderModel();
 }
 
@@ -1161,6 +1162,49 @@ function renderModelReport() {
   setText("#reportAvgConfidenceWrong", avgWrong == null ? "--" : `${Math.round(avgWrong)}%`);
   setText("#reportBestQuality", bestQuality);
   setText("#reportModelStatus", modelStatus);
+}
+
+function renderOptimizerReport() {
+  const report = state?.optimizerReport || null;
+  const rules = state?.optimizedRules || null;
+
+  if (!report) {
+    setText("#optimizerStatus", "Waiting");
+    setText("#optimizerTested", "--");
+    setText("#optimizerQualified", "--");
+    setText("#optimizerAccuracy", "--");
+    setText("#optimizerCoverage", "--");
+    setText("#optimizerConfidence", rules?.minConfidence ? `${rules.minConfidence}%` : "--");
+    setText("#optimizerEdge", rules?.minEdgeScore ? `+${rules.minEdgeScore}` : "--");
+    setText("#optimizerSupport", rules?.minSupport ?? "--");
+    setText("#optimizerAgainst", rules?.maxAgainst ?? "--");
+    setText("#optimizerPitcher", rules?.requirePitcherSignal ? "Yes" : "No");
+    setText("#optimizerLineup", rules?.requireLineupSignal ? "Yes" : "No");
+    return;
+  }
+
+  const activeRules = report.rule || rules || {};
+
+  setText("#optimizerStatus", report.ready ? "Active" : "Learning");
+  setText("#optimizerTested", report.testedPredictions ?? "--");
+  setText("#optimizerQualified", report.qualified ?? "--");
+  setText("#optimizerAccuracy", report.accuracy == null ? "--" : `${report.accuracy}%`);
+  setText("#optimizerCoverage", report.coverage == null ? "--" : `${report.coverage}%`);
+
+  setText(
+    "#optimizerConfidence",
+    activeRules.minConfidence == null ? "--" : `${activeRules.minConfidence}%`
+  );
+
+  setText(
+    "#optimizerEdge",
+    activeRules.minEdgeScore == null ? "--" : `+${activeRules.minEdgeScore}`
+  );
+
+  setText("#optimizerSupport", activeRules.minSupport ?? "--");
+  setText("#optimizerAgainst", activeRules.maxAgainst ?? "--");
+  setText("#optimizerPitcher", activeRules.requirePitcherSignal ? "Yes" : "No");
+  setText("#optimizerLineup", activeRules.requireLineupSignal ? "Yes" : "No");
 }
 
 function pitcherText(pitcher) {
