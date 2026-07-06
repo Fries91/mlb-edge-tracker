@@ -312,6 +312,77 @@
     <section class="summaryCard">
       <div class="panelHeader">
         <div>
+          <h2>Confidence Tier Backtest</h2>
+          <p>Checks which confidence ranges are actually performing best. Qualified picks only.</p>
+        </div>
+      </div>
+
+      <div class="metricGrid">
+        <div class="metricCard">
+          <span>Best Tier</span>
+          <strong id="tierBest">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Weakest Tier</span>
+          <strong id="tierWeakest">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>70%+</span>
+          <strong id="tier70">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>70%+ Record</span>
+          <strong id="tier70Record">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>65–69%</span>
+          <strong id="tier65">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>65–69 Record</span>
+          <strong id="tier65Record">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>60–64%</span>
+          <strong id="tier60">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>60–64 Record</span>
+          <strong id="tier60Record">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>55–59%</span>
+          <strong id="tier55">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>55–59 Record</span>
+          <strong id="tier55Record">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Below 55%</span>
+          <strong id="tierBelow55">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Status</span>
+          <strong id="tierStatus">--</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="summaryCard">
+      <div class="panelHeader">
+        <div>
           <h2>Sync Safety Monitor</h2>
           <p>Uses cached data if the latest sync fails.</p>
         </div>
@@ -728,8 +799,8 @@
         </div>
 
         <div class="helpCard">
-          <h3>Confidence</h3>
-          <p>Raw confidence comes from the model. Calibrated confidence adjusts based on how similar picks performed.</p>
+          <h3>Confidence Tiers</h3>
+          <p>Backtests each confidence range so you can see which ranges are actually performing best.</p>
         </div>
 
         <div class="helpCard">
