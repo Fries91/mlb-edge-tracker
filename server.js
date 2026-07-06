@@ -10,12 +10,23 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const DB_FILE = path.join(DATA_DIR, "mlb-edge-db.json");
 const MLB_API = "https://statsapi.mlb.com/api/v1";
 
-const ENGINE_VERSION = "qualified-picks-v1";
+const ENGINE_VERSION = "qualified-picks-optimizer-v1";
 const SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const PITCHER_CACHE_MS = 6 * 60 * 60 * 1000;
 const HISTORY_DAYS = 120;
 const BACKTEST_TRAINING_LIMIT = 420;
 const LEARN_RATE = 0.024;
+
+const DEFAULT_QUALIFY_RULES = {
+  minConfidence: 58,
+  minEdgeScore: 2,
+  minSupport: 5,
+  maxAgainst: 8,
+  requirePitcherSignal: false,
+  requireLineupSignal: false
+};
+
+const OPTIMIZER_MIN_SAMPLE = 30;
 
 const DEFAULT_WEIGHTS = {
   bias: 0.035,
@@ -66,7 +77,8 @@ function defaultDb() {
     },
     logs: [],
     meta: {
-      engineVersion: ENGINE_VERSION
+      engineVersion: ENGINE_VERSION,
+      optimizedRules: { ...DEFAULT_QUALIFY_RULES }
     }
   };
 }
@@ -89,8 +101,23 @@ function normalizeDb(db) {
       lastTrainedAt: clean.model?.lastTrainedAt || null
     },
     logs: Array.isArray(clean.logs) ? clean.logs : [],
-    meta: clean.meta || {}
+    meta: {
+      ...(clean.meta || {}),
+      optimizedRules: {
+        ...DEFAULT_QUALIFY_RULES,
+        ...((clean.meta && clean.meta.optimizedRules) || {})
+      }
+    }
   };
+}
+
+function logMessage(db, message) {
+  db.logs = db.logs || [];
+  db.logs.unshift({
+    at: new Date().toISOString(),
+    message
+  });
+  db.logs = db.logs.slice(0, 120);
 }
 
 function maybeUpgradeEngine(db) {
@@ -106,6 +133,9 @@ function maybeUpgradeEngine(db) {
   db.meta = {
     ...(db.meta || {}),
     engineVersion: ENGINE_VERSION,
+    optimizedRules: { ...DEFAULT_QUALIFY_RULES },
+    optimizerReport: null,
+    factorReport: {},
     engineResetAt: new Date().toISOString()
   };
 
@@ -135,15 +165,6 @@ function readDb() {
 function saveDb(db) {
   ensureDataDir();
   fs.writeFileSync(DB_FILE, JSON.stringify(normalizeDb(db), null, 2));
-}
-
-function logMessage(db, message) {
-  db.logs = db.logs || [];
-  db.logs.unshift({
-    at: new Date().toISOString(),
-    message
-  });
-  db.logs = db.logs.slice(0, 120);
 }
 
 function clamp(value, min, max) {
@@ -287,7 +308,7 @@ async function syncTeamBattingSplits(db) {
 
         db.teams[String(team.id)].battingSplits = parsed;
       } catch {
-        // If split data is not available, the model simply ignores this factor.
+        // Split data is optional.
       }
     })
   );
@@ -473,7 +494,7 @@ async function getPitcherStats(id, db, season) {
     baseStats.starts = starts;
     baseStats.kPerGame = starts && strikeOuts != null ? strikeOuts / starts : null;
   } catch {
-    // Keep defaults.
+    // Optional.
   }
 
   try {
@@ -509,7 +530,7 @@ async function getPitcherStats(id, db, season) {
       baseStats.recentGamesUsed = recent.length;
     }
   } catch {
-    // Recent pitcher data is helpful but optional.
+    // Optional.
   }
 
   db.pitchers[cacheKey] = {
@@ -1078,6 +1099,7 @@ function supportSummary(features, pickHome) {
 
   Object.entries(features).forEach(([key, value]) => {
     const n = Number(value || 0);
+
     if (Math.abs(n) < 0.04) {
       close += 1;
       return;
@@ -1097,24 +1119,235 @@ function supportSummary(features, pickHome) {
   };
 }
 
-function qualifyPrediction(confidence, summary, game, features) {
+function getQualificationRules(db) {
+  return {
+    ...DEFAULT_QUALIFY_RULES,
+    ...((db.meta && db.meta.optimizedRules) || {})
+  };
+}
+
+function hasPitcherSignal(features) {
+  return [
+    features.pitcherEra,
+    features.pitcherWhip,
+    features.pitcherStrikeouts,
+    features.pitcherRecentEra,
+    features.pitcherRecentWhip,
+    features.pitcherRecentK
+  ].some(value => Math.abs(Number(value || 0)) >= 0.04);
+}
+
+function hasLineupSignal(features) {
+  return Math.abs(Number(features.lineupStrength || 0)) >= 0.04 ||
+    Math.abs(Number(features.handednessSplit || 0)) >= 0.04;
+}
+
+function ruleCandidateList() {
+  const candidates = [];
+
+  const confidenceOptions = [56, 58, 60, 62, 64];
+  const edgeOptions = [1, 2, 3, 4, 5];
+  const supportOptions = [4, 5, 6, 7];
+  const againstOptions = [4, 5, 6, 7, 8];
+
+  confidenceOptions.forEach(minConfidence => {
+    edgeOptions.forEach(minEdgeScore => {
+      supportOptions.forEach(minSupport => {
+        againstOptions.forEach(maxAgainst => {
+          candidates.push({
+            minConfidence,
+            minEdgeScore,
+            minSupport,
+            maxAgainst,
+            requirePitcherSignal: false,
+            requireLineupSignal: false
+          });
+
+          candidates.push({
+            minConfidence,
+            minEdgeScore,
+            minSupport,
+            maxAgainst,
+            requirePitcherSignal: true,
+            requireLineupSignal: false
+          });
+
+          candidates.push({
+            minConfidence,
+            minEdgeScore,
+            minSupport,
+            maxAgainst,
+            requirePitcherSignal: false,
+            requireLineupSignal: true
+          });
+        });
+      });
+    });
+  });
+
+  return candidates;
+}
+
+function predictionPassesRule(pred, rule) {
+  if (!pred) return false;
+  if (!pred.features) return false;
+  if (!pred.supportSummary) return false;
+  if (!pred.modelWinnerTeamId) return false;
+
+  const confidence = Number(pred.confidence || 0);
+  const summary = pred.supportSummary;
+  const features = pred.features;
+
+  if (confidence < rule.minConfidence) return false;
+  if (Number(summary.edgeScore || 0) < rule.minEdgeScore) return false;
+  if (Number(summary.support || 0) < rule.minSupport) return false;
+  if (Number(summary.against || 0) > rule.maxAgainst) return false;
+  if (Number(summary.against || 0) > Number(summary.support || 0)) return false;
+
+  if (rule.requirePitcherSignal && !hasPitcherSignal(features)) return false;
+  if (rule.requireLineupSignal && !hasLineupSignal(features)) return false;
+
+  return true;
+}
+
+function evaluateRule(predictions, rule) {
+  const qualified = predictions.filter(pred => predictionPassesRule(pred, rule));
+
+  if (qualified.length < OPTIMIZER_MIN_SAMPLE) {
+    return null;
+  }
+
+  const correct = qualified.filter(pred => {
+    return String(pred.result?.actualWinnerTeamId) === String(pred.modelWinnerTeamId);
+  }).length;
+
+  const accuracy = correct / qualified.length;
+  const coverage = qualified.length / predictions.length;
+
+  const score =
+    accuracy * 100 +
+    Math.min(coverage, 0.35) * 18 +
+    Math.min(qualified.length / 100, 1) * 5;
+
+  return {
+    rule,
+    qualified: qualified.length,
+    correct,
+    accuracy,
+    coverage,
+    score
+  };
+}
+
+function optimizeQualificationRules(db) {
+  const predictions = (db.predictions || []).filter(pred => {
+    return pred.result &&
+      pred.features &&
+      pred.supportSummary &&
+      pred.modelWinnerTeamId &&
+      pred.result.actualWinnerTeamId;
+  });
+
+  if (predictions.length < OPTIMIZER_MIN_SAMPLE) {
+    db.meta = {
+      ...(db.meta || {}),
+      optimizedRules: {
+        ...DEFAULT_QUALIFY_RULES
+      },
+      optimizerReport: {
+        ready: false,
+        reason: `Need at least ${OPTIMIZER_MIN_SAMPLE} graded model picks. Current: ${predictions.length}`,
+        testedPredictions: predictions.length,
+        updatedAt: new Date().toISOString()
+      }
+    };
+
+    return db.meta.optimizedRules;
+  }
+
+  let best = null;
+
+  ruleCandidateList().forEach(rule => {
+    const result = evaluateRule(predictions, rule);
+
+    if (!result) return;
+
+    if (!best || result.score > best.score) {
+      best = result;
+    }
+  });
+
+  if (!best) {
+    db.meta = {
+      ...(db.meta || {}),
+      optimizedRules: {
+        ...DEFAULT_QUALIFY_RULES
+      },
+      optimizerReport: {
+        ready: false,
+        reason: "No optimizer rule had enough qualified historical picks.",
+        testedPredictions: predictions.length,
+        updatedAt: new Date().toISOString()
+      }
+    };
+
+    return db.meta.optimizedRules;
+  }
+
+  db.meta = {
+    ...(db.meta || {}),
+    optimizedRules: best.rule,
+    optimizerReport: {
+      ready: true,
+      testedPredictions: predictions.length,
+      qualified: best.qualified,
+      correct: best.correct,
+      accuracy: Math.round(best.accuracy * 100),
+      coverage: Math.round(best.coverage * 100),
+      score: Math.round(best.score * 100) / 100,
+      rule: best.rule,
+      updatedAt: new Date().toISOString()
+    }
+  };
+
+  return db.meta.optimizedRules;
+}
+
+function qualifyPrediction(confidence, summary, game, features, db) {
+  const rules = getQualificationRules(db);
   const missingPitchers = !game.homePitcher?.id || !game.awayPitcher?.id;
   const lineupKnown = Boolean(game.homeLineup?.announced && game.awayLineup?.announced);
+
   const strongLineupAgainst =
     Math.abs(features.lineupStrength || 0) >= 0.35 &&
-    ((features.lineupStrength > 0 && summary.edgeScore < 0) || (features.lineupStrength < 0 && summary.edgeScore > 0));
+    ((features.lineupStrength > 0 && summary.edgeScore < 0) ||
+      (features.lineupStrength < 0 && summary.edgeScore > 0));
 
-  if (confidence < 58) {
+  if (confidence < rules.minConfidence) {
     return {
       qualified: false,
-      reason: "No Pick: confidence below 58%"
+      reason: `No Pick: confidence below optimized ${rules.minConfidence}%`
     };
   }
 
-  if (summary.edgeScore < 2) {
+  if (summary.edgeScore < rules.minEdgeScore) {
     return {
       qualified: false,
-      reason: "No Pick: not enough edge separation"
+      reason: `No Pick: edge score below optimized +${rules.minEdgeScore}`
+    };
+  }
+
+  if (summary.support < rules.minSupport) {
+    return {
+      qualified: false,
+      reason: `No Pick: fewer than ${rules.minSupport} support factors`
+    };
+  }
+
+  if (summary.against > rules.maxAgainst) {
+    return {
+      qualified: false,
+      reason: `No Pick: more than ${rules.maxAgainst} opposing factors`
     };
   }
 
@@ -1125,7 +1358,21 @@ function qualifyPrediction(confidence, summary, game, features) {
     };
   }
 
-  if (missingPitchers && confidence < 66) {
+  if (rules.requirePitcherSignal && !hasPitcherSignal(features)) {
+    return {
+      qualified: false,
+      reason: "No Pick: optimizer requires pitcher edge"
+    };
+  }
+
+  if (rules.requireLineupSignal && !hasLineupSignal(features)) {
+    return {
+      qualified: false,
+      reason: "No Pick: optimizer requires lineup/split edge"
+    };
+  }
+
+  if (missingPitchers && confidence < Math.max(66, rules.minConfidence + 4)) {
     return {
       qualified: false,
       reason: "No Pick: probable pitcher data missing"
@@ -1141,7 +1388,7 @@ function qualifyPrediction(confidence, summary, game, features) {
 
   return {
     qualified: true,
-    reason: "Qualified Pick"
+    reason: "Optimized Qualified Pick"
   };
 }
 
@@ -1195,7 +1442,7 @@ function buildReasons(game, features, qualifiedInfo) {
     .slice(0, 8)
     .map(item => `${item.team} ${item.label}`);
 
-  return reasons.length ? reasons : ["Qualified Pick: small but clear edge"];
+  return reasons.length ? reasons : ["Optimized Qualified Pick"];
 }
 
 function buildSourceReferences(game, features) {
@@ -1282,7 +1529,7 @@ function calculatePrediction(game, db) {
     86
   );
 
-  const qualifiedInfo = qualifyPrediction(confidence, summary, game, features);
+  const qualifiedInfo = qualifyPrediction(confidence, summary, game, features, db);
   const scores = projectedScores(game, db, pickHome);
 
   return {
@@ -1294,6 +1541,10 @@ function calculatePrediction(game, db) {
     awayTeamName: game.awayTeamName,
     homeTeamId: game.homeTeamId,
     homeTeamName: game.homeTeamName,
+
+    modelWinnerTeamId: pickHome ? game.homeTeamId : game.awayTeamId,
+    modelWinnerName: pickHome ? game.homeTeamName : game.awayTeamName,
+    modelPickHome: pickHome,
 
     predictedWinnerTeamId: qualifiedInfo.qualified ? (pickHome ? game.homeTeamId : game.awayTeamId) : null,
     predictedWinnerName: qualifiedInfo.qualified ? (pickHome ? game.homeTeamName : game.awayTeamName) : "No Pick / Too Close",
@@ -1403,6 +1654,7 @@ function backfillHistoricalTraining(db, finalGames) {
     if (exists) return;
 
     const trainingDb = buildTrainingDbForDate(db, finalGames, game.officialDate);
+
     const prediction = {
       ...calculatePrediction(game, trainingDb),
       locked: true,
@@ -1457,7 +1709,9 @@ function gradePredictions(db, finalGames) {
         ? finalGame.homeTeamName
         : finalGame.awayTeamName;
 
-    const correct = pred.qualified && String(actualWinnerTeamId) === String(pred.predictedWinnerTeamId);
+    const correct = pred.qualified &&
+      String(actualWinnerTeamId) === String(pred.modelWinnerTeamId || pred.predictedWinnerTeamId);
+
     const counted = Boolean(pred.qualified && !pred.lateCreated && !pred.historicalTraining);
 
     pred.locked = true;
@@ -1523,7 +1777,7 @@ function buildFactorReport(db) {
   db.predictions
     .filter(pred => pred.qualified && pred.result)
     .forEach(pred => {
-      const pickHome = String(pred.predictedWinnerTeamId) === String(pred.homeTeamId);
+      const pickHome = String(pred.modelWinnerTeamId || pred.predictedWinnerTeamId) === String(pred.homeTeamId);
 
       Object.keys(report).forEach(key => {
         const value = Number(pred.features?.[key] || 0);
@@ -1637,6 +1891,8 @@ function buildDashboard(db) {
     model: db.model,
     logs: db.logs || [],
     factorReport: db.meta.factorReport || {},
+    optimizerReport: db.meta.optimizerReport || null,
+    optimizedRules: db.meta.optimizedRules || DEFAULT_QUALIFY_RULES,
     engineVersion: ENGINE_VERSION
   };
 }
@@ -1661,6 +1917,13 @@ async function fullAutoSync() {
 
   const addedTraining = backfillHistoricalTraining(db, finalRecentGames);
   gradePredictions(db, finalRecentGames);
+
+  const optimizedRules = optimizeQualificationRules(db);
+
+  logMessage(
+    db,
+    `Backtest optimizer selected: confidence ${optimizedRules.minConfidence}%, edge +${optimizedRules.minEdgeScore}, support ${optimizedRules.minSupport}, max against ${optimizedRules.maxAgainst}.`
+  );
 
   const todayGames = await fetchScheduleByDate(today);
   const tomorrowGames = await fetchScheduleByDate(tomorrow);
@@ -1806,7 +2069,13 @@ async function handleApi(req, res, url) {
       trainedGames: 0,
       lastTrainedAt: null
     };
-    db.meta.engineVersion = ENGINE_VERSION;
+    db.meta = {
+      ...(db.meta || {}),
+      engineVersion: ENGINE_VERSION,
+      optimizedRules: { ...DEFAULT_QUALIFY_RULES },
+      optimizerReport: null,
+      factorReport: {}
+    };
 
     logMessage(db, "Manual reset + retrain requested.");
     saveDb(db);
@@ -1817,6 +2086,27 @@ async function handleApi(req, res, url) {
       ok: true,
       message: "Model reset and retrained.",
       dashboard
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/optimize-rules") {
+    const db = readDb();
+
+    const rules = optimizeQualificationRules(db);
+    logMessage(
+      db,
+      `Manual optimizer run: confidence ${rules.minConfidence}%, edge +${rules.minEdgeScore}, support ${rules.minSupport}, max against ${rules.maxAgainst}.`
+    );
+
+    saveDb(db);
+
+    sendJson(res, 200, {
+      ok: true,
+      message: "Backtest optimizer complete.",
+      optimizedRules: rules,
+      optimizerReport: db.meta.optimizerReport || null,
+      dashboard: buildDashboard(db)
     });
     return;
   }
