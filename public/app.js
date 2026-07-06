@@ -874,6 +874,7 @@ function render() {
   renderRefreshStatus();
   renderDataHealth();
   renderQualityAccuracy();
+  renderRollingAccuracy();
   renderSafetyMonitor();
   renderBestBoard(bestGames);
   renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
@@ -1020,6 +1021,43 @@ function renderQualityAccuracy() {
   setText("#qualityLeanAccuracy", qualityAccuracyText(buckets.lean));
   setText("#qualityRiskyAccuracy", qualityAccuracyText(buckets.risky));
   setText("#qualityCountedGames", countedGames);
+}
+
+function rollingAccuracyText(item) {
+  if (!item || item.accuracy == null) return "--";
+  return `${item.accuracy}%`;
+}
+
+function rollingRecordText(item) {
+  if (!item || !item.total) return "0/0";
+  return `${item.correct}/${item.total}`;
+}
+
+function rollingTrendIcon(direction) {
+  if (direction === "up") return "📈";
+  if (direction === "down") return "📉";
+  if (direction === "flat") return "➖";
+  return "⏳";
+}
+
+function renderRollingAccuracy() {
+  const rolling = state?.rollingAccuracy || {};
+  const last7 = rolling.last7 || null;
+  const last14 = rolling.last14 || null;
+  const last30 = rolling.last30 || null;
+
+  setText("#rolling7Accuracy", rollingAccuracyText(last7));
+  setText("#rolling7Record", rollingRecordText(last7));
+
+  setText("#rolling14Accuracy", rollingAccuracyText(last14));
+  setText("#rolling14Record", rollingRecordText(last14));
+
+  setText("#rolling30Accuracy", rollingAccuracyText(last30));
+  setText("#rolling30Record", rollingRecordText(last30));
+
+  const trendIcon = rollingTrendIcon(rolling.trendDirection);
+  setText("#rollingTrend", `${trendIcon} ${rolling.trendStatus || "Learning"}`);
+  setText("#rollingUpdated", rolling.updatedAt ? formatClock(rolling.updatedAt) : "--");
 }
 
 function average(values) {
