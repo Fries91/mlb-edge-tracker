@@ -3,6 +3,8 @@ let bestFilter = "all";
 let qualityFilter = "all";
 let bestSort = "confidence";
 let volumeFilter = "5";
+let autoHideBadTiers = true;
+
 let lastSyncAt = null;
 let nextAutoSyncAt = null;
 let currentRefreshStatus = "Ready";
@@ -14,8 +16,9 @@ let nextRetryAt = null;
 let deferredInstallPrompt = null;
 let qualityCalibrationCache = null;
 
+const APP_VERSION = "v1.0 Final";
 const FRONTEND_SYNC_MS = 15 * 60 * 1000;
-const CACHE_KEY = "mlb-edge-dashboard-cache";
+const CACHE_KEY = "mlb-edge-dashboard-cache-final-1";
 
 const FACTOR_LABELS = {
   winPct: "Season Win %",
@@ -223,17 +226,17 @@ function bestFilterMinimum() {
 }
 
 function bestFilterLabel() {
-  if (bestFilter === "strong") return "Confidence: 🔥 Strong Edge only, 68%+.";
-  if (bestFilter === "good") return "Confidence: ✅ Good Edge+, 60%+.";
-  if (bestFilter === "lean") return "Confidence: ⚠️ Lean+, 54%+.";
+  if (bestFilter === "strong") return "Confidence: Strong 68%+.";
+  if (bestFilter === "good") return "Confidence: Good 60%+.";
+  if (bestFilter === "lean") return "Confidence: Lean 54%+.";
   return "Confidence: All.";
 }
 
 function qualityFilterLabel() {
-  if (qualityFilter === "elite") return "Quality: 🏆 Elite only.";
-  if (qualityFilter === "strong") return "Quality: 🔥 Strong+.";
-  if (qualityFilter === "good") return "Quality: ✅ Good+.";
-  if (qualityFilter === "lean") return "Quality: ⚠️ Lean+.";
+  if (qualityFilter === "elite") return "Quality: Elite only.";
+  if (qualityFilter === "strong") return "Quality: Strong+.";
+  if (qualityFilter === "good") return "Quality: Good+.";
+  if (qualityFilter === "lean") return "Quality: Lean+.";
   return "Quality: All.";
 }
 
@@ -325,6 +328,21 @@ function setupBestFilters() {
       render();
     });
   });
+
+  const autoHideBtn = $("#autoHideBadTiersBtn");
+
+  if (autoHideBtn) {
+    autoHideBtn.addEventListener("click", () => {
+      autoHideBadTiers = !autoHideBadTiers;
+
+      autoHideBtn.classList.toggle("active", autoHideBadTiers);
+      autoHideBtn.textContent = autoHideBadTiers
+        ? "Hide Cold / Avoid Tiers: On"
+        : "Hide Cold / Avoid Tiers: Off";
+
+      render();
+    });
+  }
 
   $$("#confidenceFilters .filterBtn").forEach(button => {
     button.addEventListener("click", () => {
@@ -540,7 +558,7 @@ function basePickQualityData(game, pred) {
   if (pred.noPick === true || pred.qualified === false) {
     return {
       key: "risky",
-      label: "No Pick",
+      label: "No Pick / Too Close",
       detail: pred.noPickReason || "Skipped because the matchup is too close or missing key data.",
       className: "qualityRisky"
     };
@@ -577,7 +595,7 @@ function basePickQualityData(game, pred) {
   ) {
     return {
       key: "elite",
-      label: "🏆 Elite Edge",
+      label: "🏆 Elite Qualified Pick",
       detail: "High confidence with season, recent form, and pitcher data lining up together.",
       className: "qualityElite"
     };
@@ -586,7 +604,7 @@ function basePickQualityData(game, pred) {
   if (confidence >= 68 && summary.score >= 5 && summary.against <= 4) {
     return {
       key: "strong",
-      label: "🔥 Strong Edge",
+      label: "🔥 Strong Qualified Pick",
       detail: "Strong confidence with more advanced factors supporting than against.",
       className: "qualityStrong"
     };
@@ -595,7 +613,7 @@ function basePickQualityData(game, pred) {
   if (confidence >= 60 && summary.score >= 3) {
     return {
       key: "good",
-      label: "✅ Good Edge",
+      label: "✅ Good Qualified Pick",
       detail: "Good calculated edge with several matchup factors supporting the pick.",
       className: "qualityGood"
     };
@@ -604,7 +622,7 @@ function basePickQualityData(game, pred) {
   if (confidence >= 54 && summary.score >= 0) {
     return {
       key: "lean",
-      label: "⚠️ Lean",
+      label: "⚠️ Lean Qualified Pick",
       detail: "Small edge. Watchable, but not a dominant matchup.",
       className: "qualityLean"
     };
@@ -725,7 +743,7 @@ function pickStrength(pred, game = pred) {
 
   if (pred.noPick === true || pred.qualified === false) {
     return {
-      label: "No Pick",
+      label: "No Pick / Too Close",
       detail: pred.noPickReason || "Skipped by qualified-pick filter",
       className: "warn"
     };
@@ -733,9 +751,9 @@ function pickStrength(pred, game = pred) {
 
   const c = calibratedConfidence(game, pred);
 
-  if (c >= 68) return { label: "🔥 Strong Edge", detail: "Highest calibrated automatic edge", className: "good" };
-  if (c >= 60) return { label: "✅ Good Edge", detail: "Solid calibrated edge", className: "good" };
-  if (c >= 54) return { label: "⚠️ Lean", detail: "Small calculated edge", className: "warn" };
+  if (c >= 68) return { label: "🔥 Strong Qualified", detail: "Highest calibrated automatic edge", className: "good" };
+  if (c >= 60) return { label: "✅ Good Qualified", detail: "Solid calibrated edge", className: "good" };
+  if (c >= 54) return { label: "⚠️ Lean Qualified", detail: "Small calculated edge", className: "warn" };
 
   return {
     label: "🧊 Toss Up",
@@ -785,6 +803,159 @@ function pickQualityData(game, pred) {
     className: meta.className,
     detail: `Auto-${moved} from ${base.label} because this bucket is ${accuracyText} over ${bucket.total} counted games.`
   };
+}
+
+function emptyTier(label, min, max) {
+  return {
+    label,
+    min,
+    max,
+    correct: 0,
+    wrong: 0,
+    total: 0,
+    accuracy: null,
+    status: "⏳ Learning",
+    statusKey: "learning",
+    statusClass: "warn"
+  };
+}
+
+function confidenceTierBacktestData() {
+  const tiers = {
+    tier70: emptyTier("70%+", 70, 100),
+    tier65: emptyTier("65–69%", 65, 69),
+    tier60: emptyTier("60–64%", 60, 64),
+    tier55: emptyTier("55–59%", 55, 59),
+    tierBelow55: emptyTier("Below 55%", 0, 54)
+  };
+
+  const predictions = state?.predictions || [];
+
+  predictions.forEach(pred => {
+    if (!pred.result) return;
+    if (pred.result.counted !== true) return;
+    if (pred.qualified === false || pred.noPick === true) return;
+
+    const confidence = calibratedConfidence(pred, pred);
+
+    let tier = null;
+
+    if (confidence >= 70) tier = tiers.tier70;
+    else if (confidence >= 65) tier = tiers.tier65;
+    else if (confidence >= 60) tier = tiers.tier60;
+    else if (confidence >= 55) tier = tiers.tier55;
+    else tier = tiers.tierBelow55;
+
+    tier.total += 1;
+
+    if (pred.result.correct) tier.correct += 1;
+    else tier.wrong += 1;
+  });
+
+  Object.values(tiers).forEach(tier => {
+    tier.accuracy = tier.total
+      ? Math.round((tier.correct / tier.total) * 100)
+      : null;
+
+    const status = tierWarningStatus(tier);
+    tier.status = status.label;
+    tier.statusKey = status.key;
+    tier.statusClass = status.className;
+  });
+
+  return tiers;
+}
+
+function tierWarningStatus(tier) {
+  if (!tier || tier.total < 5 || tier.accuracy == null) {
+    return {
+      key: "learning",
+      label: "⏳ Learning",
+      className: "warn"
+    };
+  }
+
+  if (tier.accuracy >= 64 && tier.total >= 8) {
+    return {
+      key: "hot",
+      label: "🔥 Hot",
+      className: "good"
+    };
+  }
+
+  if (tier.accuracy >= 56) {
+    return {
+      key: "safe",
+      label: "✅ Safe",
+      className: "good"
+    };
+  }
+
+  if (tier.accuracy >= 50) {
+    return {
+      key: "cold",
+      label: "⚠️ Cold",
+      className: "warn"
+    };
+  }
+
+  return {
+    key: "avoid",
+    label: "🚫 Avoid",
+    className: "bad"
+  };
+}
+
+function tierForConfidence(confidence, tiers = confidenceTierBacktestData()) {
+  const c = Number(confidence || 0);
+
+  if (c >= 70) return tiers.tier70;
+  if (c >= 65) return tiers.tier65;
+  if (c >= 60) return tiers.tier60;
+  if (c >= 55) return tiers.tier55;
+  return tiers.tierBelow55;
+}
+
+function tierAccuracyText(tier) {
+  if (!tier || tier.accuracy == null) return "--";
+  return `${tier.accuracy}% (${tier.correct}/${tier.total})`;
+}
+
+function tierLabelWithAccuracy(tier) {
+  if (!tier || tier.accuracy == null) return "--";
+  return `${tier.label} ${tier.accuracy}%`;
+}
+
+function shouldAutoHideGame(game, tiers = confidenceTierBacktestData()) {
+  if (!autoHideBadTiers) return false;
+
+  const pred = game?.prediction;
+  if (!pred || pred.noPick === true || pred.qualified === false) return false;
+
+  const confidence = calibratedConfidence(game, pred);
+  const tier = tierForConfidence(confidence, tiers);
+
+  if (!tier || tier.total < 5) return false;
+
+  return tier.statusKey === "cold" || tier.statusKey === "avoid";
+}
+
+function average(values) {
+  const usable = values
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value));
+
+  if (!usable.length) return null;
+
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
+}
+
+function qualityName(key) {
+  if (key === "elite") return "🏆 Elite";
+  if (key === "strong") return "🔥 Strong";
+  if (key === "good") return "✅ Good";
+  if (key === "lean") return "⚠️ Lean";
+  return "🧊 Risky";
 }
 
 function openBestBoardGames() {
@@ -862,11 +1033,13 @@ function sortedBestBoardGames(games) {
 
 function qualifiedFilteredGamesBeforeVolume() {
   const min = bestFilterMinimum();
+  const tiers = confidenceTierBacktestData();
 
   return sortedBestBoardGames(
     openBestBoardGames()
       .filter(game => calibratedConfidence(game, game.prediction) >= min)
       .filter(game => passesQualityFilter(game))
+      .filter(game => !shouldAutoHideGame(game, tiers))
   );
 }
 
@@ -889,6 +1062,7 @@ function render() {
     ? calibratedConfidence(allOpenBest[0], allOpenBest[0].prediction)
     : null;
 
+  setText("#versionStamp", `${APP_VERSION} • Automatic MLB analytics board`);
   setText("#todayCount", state.todayGames?.length || 0);
   setText("#tomorrowCount", state.tomorrowGames?.length || 0);
   setText("#predictionCount", state.predictions?.length || 0);
@@ -903,9 +1077,10 @@ function render() {
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
   setText(
     "#bestFilterNote",
-    `${volumeLabel()}. ${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${beforeVolume.length} filtered qualified picks. ${allOpenBest.length} total open qualified.`
+    `${volumeLabel()}. ${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Auto hide ${autoHideBadTiers ? "on" : "off"}. Showing ${bestGames.length} of ${beforeVolume.length} filtered qualified picks. ${allOpenBest.length} total open qualified.`
   );
 
+  renderModelHealth(bestGames, beforeVolume);
   renderDailySummary(bestGames, beforeVolume);
   renderRefreshStatus();
   renderDataHealth();
@@ -925,6 +1100,75 @@ function render() {
   renderFactorReport();
   renderFactorTrustReport();
   renderModel();
+}
+
+function renderModelHealth(bestGames = filteredBestBoardGames(), beforeVolume = qualifiedFilteredGamesBeforeVolume()) {
+  const rolling = state?.rollingAccuracy || {};
+  const rollingAccuracy = rolling.last14?.accuracy ?? rolling.last30?.accuracy ?? null;
+
+  const tiers = confidenceTierBacktestData();
+  const tierList = Object.values(tiers).filter(tier => tier.total >= 5 && tier.accuracy != null);
+  const hotOrSafe = tierList.filter(tier => tier.statusKey === "hot" || tier.statusKey === "safe").length;
+  const coldOrAvoid = tierList.filter(tier => tier.statusKey === "cold" || tier.statusKey === "avoid").length;
+
+  const mutedCount = Number(state?.factorTrustReport?.mutedCount ?? state?.mutedFactors?.length ?? 0);
+  const optimizerReady = Boolean(state?.optimizerReport?.ready);
+  const displayed = bestGames.length;
+  const available = beforeVolume.length;
+
+  let score = 50;
+
+  if (rollingAccuracy != null) {
+    if (rollingAccuracy >= 64) score += 22;
+    else if (rollingAccuracy >= 58) score += 14;
+    else if (rollingAccuracy >= 53) score += 7;
+    else if (rollingAccuracy < 48) score -= 12;
+  }
+
+  score += hotOrSafe * 4;
+  score -= coldOrAvoid * 5;
+
+  if (mutedCount === 0) score += 6;
+  else if (mutedCount <= 2) score += 2;
+  else if (mutedCount >= 5) score -= 10;
+
+  if (optimizerReady) score += 8;
+  else score -= 6;
+
+  if (displayed >= 1 && displayed <= 8) score += 6;
+  if (available > 12) score -= 4;
+
+  score = clamp(score, 0, 100);
+
+  let grade = "C";
+  let status = "Stable";
+
+  if (score >= 88) {
+    grade = "A";
+    status = "Hot";
+  } else if (score >= 78) {
+    grade = "B+";
+    status = "Strong";
+  } else if (score >= 68) {
+    grade = "B";
+    status = "Good";
+  } else if (score >= 58) {
+    grade = "C";
+    status = "Use Caution";
+  } else if (score >= 45) {
+    grade = "D";
+    status = "Learning";
+  } else {
+    grade = "F";
+    status = "Avoid Heavy Trust";
+  }
+
+  setText("#modelHealthGrade", grade);
+  setText("#modelHealthStatus", status);
+  setText("#modelHealthRolling", rollingAccuracy == null ? "--" : `${rollingAccuracy}%`);
+  setText("#modelHealthTier", `${hotOrSafe} safe / ${coldOrAvoid} cold`);
+  setText("#modelHealthTrust", `${mutedCount} muted`);
+  setText("#modelHealthOptimizer", optimizerReady ? "Active" : "Learning");
 }
 
 function renderDailySummary(bestGames = filteredBestBoardGames(), beforeVolume = qualifiedFilteredGamesBeforeVolume()) {
@@ -951,8 +1195,6 @@ function renderDailySummary(bestGames = filteredBestBoardGames(), beforeVolume =
   const strongCount = qualifiedToday.filter(game => calibratedConfidence(game, game.prediction) >= 68).length;
   const goodCount = qualifiedToday.filter(game => calibratedConfidence(game, game.prediction) >= 60).length;
   const lockedCount = todayPredictions.filter(game => game.prediction.locked).length;
-  const pendingCount = todayPredictions.filter(game => !game.prediction.result).length;
-
   const accuracy = state.accuracy?.accuracy;
 
   setText(
@@ -966,8 +1208,8 @@ function renderDailySummary(bestGames = filteredBestBoardGames(), beforeVolume =
   setText("#summaryGood", goodCount);
   setText("#summaryVolume", volumeLabel());
   setText("#summaryDisplayed", `${bestGames.length}/${beforeVolume.length}`);
+  setText("#summaryAutoHide", autoHideBadTiers ? "On" : "Off");
   setText("#summaryLocked", lockedCount);
-  setText("#summaryPending", pendingCount);
   setText("#summaryAccuracy", accuracy == null ? "--" : `${accuracy}%`);
 }
 
@@ -1099,78 +1341,9 @@ function renderRollingAccuracy() {
   setText("#rollingUpdated", rolling.updatedAt ? formatClock(rolling.updatedAt) : "--");
 }
 
-function emptyTier(label, min, max) {
-  return {
-    label,
-    min,
-    max,
-    correct: 0,
-    wrong: 0,
-    total: 0,
-    accuracy: null
-  };
-}
-
-function confidenceTierBacktestData() {
-  const tiers = {
-    tier70: emptyTier("70%+", 70, 100),
-    tier65: emptyTier("65–69%", 65, 69),
-    tier60: emptyTier("60–64%", 60, 64),
-    tier55: emptyTier("55–59%", 55, 59),
-    tierBelow55: emptyTier("Below 55%", 0, 54)
-  };
-
-  const predictions = state?.predictions || [];
-
-  predictions.forEach(pred => {
-    if (!pred.result) return;
-    if (pred.result.counted !== true) return;
-    if (pred.qualified === false || pred.noPick === true) return;
-
-    const confidence = calibratedConfidence(pred, pred);
-
-    let tier = null;
-
-    if (confidence >= 70) tier = tiers.tier70;
-    else if (confidence >= 65) tier = tiers.tier65;
-    else if (confidence >= 60) tier = tiers.tier60;
-    else if (confidence >= 55) tier = tiers.tier55;
-    else tier = tiers.tierBelow55;
-
-    tier.total += 1;
-
-    if (pred.result.correct) tier.correct += 1;
-    else tier.wrong += 1;
-  });
-
-  Object.values(tiers).forEach(tier => {
-    tier.accuracy = tier.total
-      ? Math.round((tier.correct / tier.total) * 100)
-      : null;
-  });
-
-  return tiers;
-}
-
-function tierAccuracyText(tier) {
-  if (!tier || tier.accuracy == null) return "--";
-  return `${tier.accuracy}%`;
-}
-
-function tierRecordText(tier) {
-  if (!tier || !tier.total) return "0/0";
-  return `${tier.correct}/${tier.total}`;
-}
-
-function tierLabelWithAccuracy(tier) {
-  if (!tier || tier.accuracy == null) return "--";
-  return `${tier.label} ${tier.accuracy}%`;
-}
-
 function renderConfidenceTierBacktest() {
   const tiers = confidenceTierBacktestData();
   const tierList = Object.values(tiers).filter(tier => tier.total > 0);
-
   const matureTiers = tierList.filter(tier => tier.total >= 5);
 
   const bestTier = matureTiers
@@ -1199,37 +1372,116 @@ function renderConfidenceTierBacktest() {
   setText("#tierWeakest", tierLabelWithAccuracy(weakestTier));
 
   setText("#tier70", tierAccuracyText(tiers.tier70));
-  setText("#tier70Record", tierRecordText(tiers.tier70));
+  setText("#tier70Status", tiers.tier70.status);
 
   setText("#tier65", tierAccuracyText(tiers.tier65));
-  setText("#tier65Record", tierRecordText(tiers.tier65));
+  setText("#tier65Status", tiers.tier65.status);
 
   setText("#tier60", tierAccuracyText(tiers.tier60));
-  setText("#tier60Record", tierRecordText(tiers.tier60));
+  setText("#tier60Status", tiers.tier60.status);
 
   setText("#tier55", tierAccuracyText(tiers.tier55));
-  setText("#tier55Record", tierRecordText(tiers.tier55));
+  setText("#tier55Status", tiers.tier55.status);
 
-  setText("#tierBelow55", tierAccuracyText(tiers.tierBelow55));
+  setText("#tierBelow55", `${tierAccuracyText(tiers.tierBelow55)} ${tiers.tierBelow55.status}`);
   setText("#tierStatus", status);
 }
 
-function average(values) {
-  const usable = values
-    .map(value => Number(value))
-    .filter(value => Number.isFinite(value));
+function reportGradeForGame(game, pred) {
+  if (!pred || pred.noPick === true || pred.qualified === false) {
+    return {
+      grade: "NP",
+      status: "No Pick",
+      detail: pred?.noPickReason || "Skipped by qualified-pick filter.",
+      className: "warn"
+    };
+  }
 
-  if (!usable.length) return null;
+  const confidence = calibratedConfidence(game, pred);
+  const strength = strengthSummaryData(game, pred);
+  const quality = pickQualityData(game, pred);
+  const tiers = confidenceTierBacktestData();
+  const tier = tierForConfidence(confidence, tiers);
+  const rollingAccuracy = state?.rollingAccuracy?.last14?.accuracy ?? state?.rollingAccuracy?.last30?.accuracy ?? null;
 
-  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
+  let score = 50;
+
+  if (confidence >= 74) score += 18;
+  else if (confidence >= 68) score += 13;
+  else if (confidence >= 60) score += 8;
+  else if (confidence >= 55) score += 3;
+
+  score += clamp(strength.score * 2, -12, 18);
+
+  if (quality.key === "elite") score += 14;
+  else if (quality.key === "strong") score += 10;
+  else if (quality.key === "good") score += 6;
+  else if (quality.key === "lean") score += 2;
+  else score -= 6;
+
+  if (tier.statusKey === "hot") score += 12;
+  else if (tier.statusKey === "safe") score += 6;
+  else if (tier.statusKey === "cold") score -= 8;
+  else if (tier.statusKey === "avoid") score -= 15;
+
+  if (rollingAccuracy != null) {
+    if (rollingAccuracy >= 62) score += 5;
+    else if (rollingAccuracy < 50) score -= 6;
+  }
+
+  score = clamp(score, 0, 100);
+
+  let grade = "C";
+  let className = "warn";
+
+  if (score >= 92) {
+    grade = "A+";
+    className = "good";
+  } else if (score >= 86) {
+    grade = "A";
+    className = "good";
+  } else if (score >= 80) {
+    grade = "A-";
+    className = "good";
+  } else if (score >= 74) {
+    grade = "B+";
+    className = "good";
+  } else if (score >= 68) {
+    grade = "B";
+    className = "good";
+  } else if (score >= 60) {
+    grade = "C";
+    className = "warn";
+  } else {
+    grade = "D";
+    className = "bad";
+  }
+
+  return {
+    grade,
+    className,
+    status: tier.status,
+    detail: `${quality.label}. Tier ${tier.status}. Support score ${strength.score > 0 ? "+" : ""}${strength.score}.`,
+    score
+  };
 }
 
-function qualityName(key) {
-  if (key === "elite") return "🏆 Elite";
-  if (key === "strong") return "🔥 Strong";
-  if (key === "good") return "✅ Good";
-  if (key === "lean") return "⚠️ Lean";
-  return "🧊 Risky";
+function reportCardHtml(game, pred) {
+  const report = reportGradeForGame(game, pred);
+
+  return `
+    <div class="pickReportCard">
+      <div class="reportGrade ${escapeHtml(report.className)}">
+        <span>Final Pick Grade</span>
+        <strong>${escapeHtml(report.grade)}</strong>
+      </div>
+
+      <div class="reportDetails">
+        <strong>${escapeHtml(report.status)}</strong>
+        <small>${escapeHtml(report.detail)}</small>
+      </div>
+    </div>
+  `;
 }
 
 function renderModelReport() {
@@ -1628,6 +1880,8 @@ function confidenceBreakdown(game, pred) {
   const edges = getPredictionEdges(game, pred);
   const rawConfidence = Number(pred.confidence || 0);
   const calibrated = calibratedConfidence(game, pred);
+  const tier = tierForConfidence(calibrated);
+  const report = reportGradeForGame(game, pred);
 
   return `
     <details class="confidenceDetails">
@@ -1636,7 +1890,12 @@ function confidenceBreakdown(game, pred) {
       <div class="confidenceBreakdown">
         <div class="breakdownLine ${pred.noPick || pred.qualified === false ? "warn" : "good"}">
           <span>Qualified Status</span>
-          <strong>${escapeHtml(pred.noPick || pred.qualified === false ? (pred.noPickReason || "No Pick") : "Qualified Pick")}</strong>
+          <strong>${escapeHtml(pred.noPick || pred.qualified === false ? (pred.noPickReason || "No Pick / Too Close") : "Qualified Pick")}</strong>
+        </div>
+
+        <div class="breakdownLine good">
+          <span>Final Pick Grade</span>
+          <strong>${escapeHtml(report.grade)} • ${escapeHtml(report.status)}</strong>
         </div>
 
         <div class="breakdownLine good">
@@ -1647,6 +1906,11 @@ function confidenceBreakdown(game, pred) {
         <div class="breakdownLine good">
           <span>Calibrated Confidence</span>
           <strong>${escapeHtml(calibrated)}%</strong>
+        </div>
+
+        <div class="breakdownLine ${escapeHtml(tier.statusClass || "warn")}">
+          <span>Confidence Tier</span>
+          <strong>${escapeHtml(tier.label)} • ${escapeHtml(tier.status)}</strong>
         </div>
 
         ${edges.map(edge => breakdownLine(edge.label, edge.value, game, pred)).join("")}
@@ -1698,7 +1962,7 @@ function renderBestBoard(games) {
   if (!games.length) {
     container.innerHTML = `
       <div class="noData">
-        No qualified picks match this filter right now. That is good if the board is messy — the app is skipping weak games.
+        No qualified picks match this filter right now. Cold and avoid tiers may be hidden. Turn Auto Hide off to view all qualified picks.
       </div>
     `;
     return;
@@ -1730,13 +1994,15 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
     const rawConfidence = Number(pred?.confidence || 0);
     const reasons = pred?.reasons || ["Waiting for enough matchup data"];
     const isBestBoard = selector === "#bestPicks";
+    const tier = tierForConfidence(confidence);
+    const report = reportGradeForGame(game, pred);
 
     let pillText = game.status || "Scheduled";
 
     if (isBestBoard) {
-      pillText = `#${index + 1} ${volumeLabel()}`;
+      pillText = `#${index + 1} Top Qualified`;
     } else if (pred?.noPick || pred?.qualified === false) {
-      pillText = "No Pick";
+      pillText = "No Pick / Too Close";
     } else if (pred?.locked) {
       pillText = "🔒 Locked";
     }
@@ -1774,7 +2040,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
           </div>
 
           <div class="pickBox">
-            <div class="pickLabel">${pred?.noPick || pred?.qualified === false ? "Qualified Filter" : "Auto Pick"}</div>
+            <div class="pickLabel">${pred?.noPick || pred?.qualified === false ? "Qualified Filter" : "Top Qualified Pick"}</div>
             <div class="pickName">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</div>
 
             <div class="projectedScore">
@@ -1795,12 +2061,15 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
               ` : ""}
             </div>
 
+            ${reportCardHtml(game, pred)}
             ${pickQualityCard(game, pred)}
             ${strengthSummary(game, pred)}
 
             <div class="edgeList">
               ${strengthBadge(pred, game)}
               ${lockBadge(pred)}
+              <span class="edgeChip ${escapeHtml(tier.statusClass || "warn")}">${escapeHtml(tier.status)}</span>
+              <span class="edgeChip ${escapeHtml(report.className || "warn")}">Grade ${escapeHtml(report.grade)}</span>
               ${reasons.slice(0, 8).map(reason => `
                 <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
               `).join("")}
@@ -1844,6 +2113,7 @@ function renderMatchups() {
           ${lockBadge(pred)}
         </div>
 
+        ${reportCardHtml(game, pred)}
         ${pickQualityCard(game, pred)}
         ${strengthSummary(game, pred)}
 
@@ -1961,6 +2231,7 @@ function renderAutoSources() {
           `).join("") : `<span class="edgeChip warn">Waiting for calculated edges</span>`}
         </div>
 
+        ${reportCardHtml(game, pred)}
         ${pickQualityCard(game, pred)}
         ${strengthSummary(game, pred)}
 
@@ -2008,6 +2279,8 @@ function renderResults() {
     const result = pred.result;
     const counted = result?.counted === true;
     const confidence = calibratedConfidence(pred, pred);
+    const tier = tierForConfidence(confidence);
+    const report = reportGradeForGame(pred, pred);
 
     const badge = result
       ? `<span class="resultBadge ${result.correct ? "correct" : "wrong"}">
@@ -2048,6 +2321,8 @@ function renderResults() {
           ${strengthBadge(pred, pred)}
           ${lockBadge(pred)}
           ${countedBadge}
+          <span class="edgeChip ${escapeHtml(tier.statusClass || "warn")}">${escapeHtml(tier.status)}</span>
+          <span class="edgeChip ${escapeHtml(report.className || "warn")}">Grade ${escapeHtml(report.grade)}</span>
         </div>
 
         ${pred.qualified ? badge : `<span class="resultBadge">No Pick</span>`}
