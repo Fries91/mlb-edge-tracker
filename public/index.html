@@ -109,6 +109,16 @@
         </div>
 
         <div class="metricCard">
+          <span>Target Volume</span>
+          <strong id="summaryVolume">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Displayed Picks</span>
+          <strong id="summaryDisplayed">--</strong>
+        </div>
+
+        <div class="metricCard">
           <span>Locked</span>
           <strong id="summaryLocked">--</strong>
         </div>
@@ -358,6 +368,13 @@
           <h2>Best Board</h2>
           <p id="bestFilterNote">Qualified picks only.</p>
         </div>
+      </div>
+
+      <div id="volumeFilters" class="filterRow">
+        <button class="filterBtn" data-volume="3" type="button">Best 3</button>
+        <button class="filterBtn active" data-volume="5" type="button">Best 5</button>
+        <button class="filterBtn" data-volume="8" type="button">Best 8</button>
+        <button class="filterBtn" data-volume="all" type="button">All Qualified</button>
       </div>
 
       <div id="confidenceFilters" class="filterRow">
@@ -707,7 +724,7 @@
       <div class="helpGrid">
         <div class="helpCard">
           <h3>Best Board</h3>
-          <p>Shows qualified picks only. Games marked No Pick are skipped because the edge was too weak or messy.</p>
+          <p>Shows the strongest qualified picks first. Use Best 3, Best 5, Best 8, or All Qualified to control volume.</p>
         </div>
 
         <div class="helpCard">
