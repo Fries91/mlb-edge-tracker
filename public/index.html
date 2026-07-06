@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>MLB Edge Tracker</title>
+  <title>MLB Edge Tracker v1.0 Final</title>
   <meta name="description" content="Automatic MLB prediction and analytics dashboard." />
   <meta name="theme-color" content="#101827" />
 
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="manifest" href="/manifest.webmanifest?v=final-1" />
+  <link rel="stylesheet" href="/styles.css?v=final-1" />
 
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -27,7 +27,7 @@
 
         <div>
           <h1>MLB Edge Tracker</h1>
-          <p>Automatic MLB analytics board</p>
+          <p id="versionStamp">v1.0 Final • Automatic MLB analytics board</p>
         </div>
       </div>
 
@@ -42,7 +42,7 @@
         <h2>Automatic MLB Edge Board</h2>
         <p>
           Pulls games, team form, pitchers, lineup data when available, park/weather signals,
-          and model learning automatically.
+          confidence calibration, optimizer rules, and model learning automatically.
         </p>
       </div>
 
@@ -87,6 +87,47 @@
     <section class="summaryCard">
       <div class="panelHeader">
         <div>
+          <h2>Daily Model Health</h2>
+          <p>Final overall grade based on recent accuracy, tier strength, factor trust, optimizer status, and pick volume.</p>
+        </div>
+      </div>
+
+      <div class="metricGrid">
+        <div class="metricCard">
+          <span>Health Grade</span>
+          <strong id="modelHealthGrade">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Health Status</span>
+          <strong id="modelHealthStatus">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Recent Accuracy</span>
+          <strong id="modelHealthRolling">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Tier Strength</span>
+          <strong id="modelHealthTier">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Factor Trust</span>
+          <strong id="modelHealthTrust">--</strong>
+        </div>
+
+        <div class="metricCard">
+          <span>Optimizer</span>
+          <strong id="modelHealthOptimizer">--</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="summaryCard">
+      <div class="panelHeader">
+        <div>
           <h2>Daily Summary</h2>
           <p>Top qualified picks and model status for today.</p>
         </div>
@@ -119,13 +160,13 @@
         </div>
 
         <div class="metricCard">
-          <span>Locked</span>
-          <strong id="summaryLocked">--</strong>
+          <span>Auto Hide</span>
+          <strong id="summaryAutoHide">--</strong>
         </div>
 
         <div class="metricCard">
-          <span>Pending</span>
-          <strong id="summaryPending">--</strong>
+          <span>Locked</span>
+          <strong id="summaryLocked">--</strong>
         </div>
 
         <div class="metricCard">
@@ -334,8 +375,8 @@
         </div>
 
         <div class="metricCard">
-          <span>70%+ Record</span>
-          <strong id="tier70Record">--</strong>
+          <span>70%+ Status</span>
+          <strong id="tier70Status">--</strong>
         </div>
 
         <div class="metricCard">
@@ -344,8 +385,8 @@
         </div>
 
         <div class="metricCard">
-          <span>65–69 Record</span>
-          <strong id="tier65Record">--</strong>
+          <span>65–69 Status</span>
+          <strong id="tier65Status">--</strong>
         </div>
 
         <div class="metricCard">
@@ -354,8 +395,8 @@
         </div>
 
         <div class="metricCard">
-          <span>60–64 Record</span>
-          <strong id="tier60Record">--</strong>
+          <span>60–64 Status</span>
+          <strong id="tier60Status">--</strong>
         </div>
 
         <div class="metricCard">
@@ -364,8 +405,8 @@
         </div>
 
         <div class="metricCard">
-          <span>55–59 Record</span>
-          <strong id="tier55Record">--</strong>
+          <span>55–59 Status</span>
+          <strong id="tier55Status">--</strong>
         </div>
 
         <div class="metricCard">
@@ -448,8 +489,14 @@
         <button class="filterBtn" data-volume="all" type="button">All Qualified</button>
       </div>
 
+      <div id="autoHideFilters" class="filterRow">
+        <button id="autoHideBadTiersBtn" class="filterBtn active" data-auto-hide="on" type="button">
+          Hide Cold / Avoid Tiers: On
+        </button>
+      </div>
+
       <div id="confidenceFilters" class="filterRow">
-        <button class="filterBtn active" data-filter="all" type="button">All</button>
+        <button class="filterBtn active" data-filter="all" type="button">All Confidence</button>
         <button class="filterBtn" data-filter="strong" type="button">Strong 68%+</button>
         <button class="filterBtn" data-filter="good" type="button">Good 60%+</button>
         <button class="filterBtn" data-filter="lean" type="button">Lean 54%+</button>
@@ -799,13 +846,23 @@
         </div>
 
         <div class="helpCard">
-          <h3>Confidence Tiers</h3>
-          <p>Backtests each confidence range so you can see which ranges are actually performing best.</p>
+          <h3>Auto Hide Bad Tiers</h3>
+          <p>When enabled, cold and avoid confidence tiers are hidden from the Best Board automatically.</p>
         </div>
 
         <div class="helpCard">
-          <h3>Optimizer</h3>
-          <p>Tests old games and chooses the best rules for minimum confidence, support factors, and edge score.</p>
+          <h3>Final Pick Report Card</h3>
+          <p>Each qualified pick receives a final grade based on confidence, support, tier health, and recent accuracy.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Model Health</h3>
+          <p>The top health grade summarizes whether the model is hot, stable, learning, or needs caution.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Confidence Tiers</h3>
+          <p>Backtests each confidence range so you can see which ranges are actually performing best.</p>
         </div>
 
         <div class="helpCard">
@@ -816,12 +873,12 @@
     </section>
   </main>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=final-1"></script>
 
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => {});
+        navigator.serviceWorker.register("/sw.js?v=final-1").catch(() => {});
       });
     }
   </script>
