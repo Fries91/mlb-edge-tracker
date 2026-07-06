@@ -412,6 +412,7 @@ function getPredictionEdges(game, pred) {
   const pitcherEdge = combinedEdge([f.pitcherEra, f.pitcherWhip, f.pitcherStrikeouts]);
   const pitcherRecentEdge = combinedEdge([f.pitcherRecentEra, f.pitcherRecentWhip, f.pitcherRecentK]);
   const seasonEdge = combinedEdge([f.winPct, f.homeAway, f.rpg, f.rapg, f.runDiff]);
+
   const recentTeamEdge = combinedEdge([
     f.recent7WinPct,
     f.recent15WinPct,
@@ -421,6 +422,7 @@ function getPredictionEdges(game, pred) {
     f.recentRunDiff,
     f.streakEdge
   ]);
+
   const fatigueEdge = combinedEdge([f.restEdge, f.bullpenFatigue]);
 
   return [
@@ -883,6 +885,7 @@ function render() {
   renderModelReport();
   renderOptimizerReport();
   renderFactorReport();
+  renderFactorTrustReport();
   renderModel();
 }
 
@@ -1219,6 +1222,103 @@ function renderFactorReport() {
           <span class="edgeChip good">${escapeHtml(entry.correct)} correct</span>
           <span class="edgeChip warn">${escapeHtml(entry.wrong)} wrong</span>
           <span class="edgeChip warn">${escapeHtml(entry.supports)} supports</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function factorTrustStatusClass(status, muted) {
+  const s = String(status || "").toLowerCase();
+
+  if (muted || s.includes("muted")) return "bad";
+  if (s.includes("reduced") || s.includes("cautious")) return "warn";
+  if (s.includes("boosted") || s.includes("trusted")) return "good";
+  if (s.includes("normal")) return "good";
+
+  return "warn";
+}
+
+function renderFactorTrustReport() {
+  const container = $("#factorTrustList");
+  const trust = state?.factorTrust || {};
+  const report = state?.factorTrustReport || null;
+  const mutedFactors = state?.mutedFactors || [];
+
+  if (!container) return;
+
+  setText("#factorTrustStatus", report ? "Active" : "Learning");
+  setText("#factorTrustMuted", report?.mutedCount ?? mutedFactors.length ?? "--");
+  setText("#factorTrustReduced", report?.reducedCount ?? "--");
+  setText("#factorTrustBoosted", report?.boostedCount ?? "--");
+  setText("#factorTrustLearning", report?.learningCount ?? "--");
+  setText("#factorTrustUpdated", report?.updatedAt ? formatClock(report.updatedAt) : "--");
+
+  const entries = Object.entries(trust)
+    .filter(([key]) => key !== "bias")
+    .map(([key, item]) => {
+      const trustScore = Number(item?.trust ?? 1);
+      const supports = Number(item?.supports || 0);
+      const accuracy = Number(item?.accuracy);
+      const muted = Boolean(item?.muted);
+
+      return {
+        key,
+        item,
+        trustScore,
+        supports,
+        accuracy,
+        muted,
+        status: item?.status || "Learning",
+        correct: Number(item?.correct || 0),
+        wrong: Number(item?.wrong || 0)
+      };
+    })
+    .sort((a, b) => {
+      if (a.muted !== b.muted) return a.muted ? -1 : 1;
+      if (b.trustScore !== a.trustScore) return b.trustScore - a.trustScore;
+      return b.supports - a.supports;
+    });
+
+  if (!entries.length) {
+    container.innerHTML = `
+      <div class="noData">
+        No factor trust data yet. Open /api/factor-trust, then Sync.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = entries.map(entry => {
+    const statusClass = factorTrustStatusClass(entry.status, entry.muted);
+    const trustPercent = Math.round(clamp(entry.trustScore, 0, 1.25) * 100);
+    const barWidth = entry.muted
+      ? 5
+      : Math.max(5, Math.min(100, Math.round(clamp(entry.trustScore, 0, 1.25) * 80)));
+
+    const accuracyText = Number.isFinite(entry.accuracy)
+      ? `${entry.accuracy}%`
+      : "--";
+
+    return `
+      <div class="weightCard">
+        <div class="weightName">${escapeHtml(factorLabel(entry.key))}</div>
+
+        <div class="weightBar">
+          <div class="weightFill" style="width:${barWidth}%;"></div>
+        </div>
+
+        <div class="weightValue">
+          Trust ${escapeHtml(trustPercent)}%
+        </div>
+
+        <div class="edgeList">
+          <span class="edgeChip ${escapeHtml(statusClass)}">${escapeHtml(entry.status)}</span>
+          ${entry.muted ? `<span class="edgeChip bad">Muted</span>` : ""}
+          <span class="edgeChip warn">Accuracy ${escapeHtml(accuracyText)}</span>
+          <span class="edgeChip warn">${escapeHtml(entry.supports)} supports</span>
+          <span class="edgeChip good">${escapeHtml(entry.correct)} correct</span>
+          <span class="edgeChip warn">${escapeHtml(entry.wrong)} wrong</span>
         </div>
       </div>
     `;
