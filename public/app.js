@@ -82,7 +82,7 @@ function prettyDate(dateValue) {
 
 function isFinalStatus(status) {
   const s = String(status || "").toLowerCase();
-  return s.includes("final") || s.includes("completed");
+  return s.includes("final") || s.includes("completed") || s.includes("game over");
 }
 
 function saveDashboardCache(data) {
@@ -471,6 +471,9 @@ function getPredictionEdges(game, pred) {
     { label: "Starter Recent WHIP Edge", value: f.pitcherRecentWhip },
     { label: "Starter Recent K Edge", value: f.pitcherRecentK },
 
+    { label: "Batting Split Edge", value: f.handednessSplit },
+    { label: "Lineup Strength Edge", value: f.lineupStrength },
+
     { label: "Head-to-Head Edge", value: f.h2h },
     { label: "Rest-Day Edge", value: f.restEdge },
     { label: "Bullpen Fatigue Edge", value: f.bullpenFatigue }
@@ -486,7 +489,7 @@ function edgeSupportsPick(edge, game, pred) {
   const winner = edgeWinner(n, game);
   const picked = pred?.predictedWinnerName || "";
 
-  if (!picked || winner === "Close") return "close";
+  if (!picked || picked.includes("No Pick") || winner === "Close") return "close";
   if (winner === picked) return "support";
 
   return "against";
@@ -528,6 +531,15 @@ function basePickQualityData(game, pred) {
       key: "risky",
       label: "Calculating",
       detail: "Waiting for enough automatic data.",
+      className: "qualityRisky"
+    };
+  }
+
+  if (pred.noPick === true || pred.qualified === false) {
+    return {
+      key: "risky",
+      label: "No Pick",
+      detail: pred.noPickReason || "Skipped because the matchup is too close or missing key data.",
       className: "qualityRisky"
     };
   }
@@ -632,6 +644,7 @@ function buildQualityCalibration() {
 
     if (!result) return;
     if (result.counted === false) return;
+    if (pred.noPick === true || pred.qualified === false) return;
 
     const rawQuality = basePickQualityData(pred, pred);
     const key = buckets[rawQuality.key] ? rawQuality.key : "risky";
@@ -691,6 +704,10 @@ function calibratedConfidence(game, pred) {
 
   if (!Number.isFinite(baseConfidence)) return 0;
 
+  if (pred.noPick === true || pred.qualified === false) {
+    return Math.min(baseConfidence, 52);
+  }
+
   const baseQuality = basePickQualityData(game || pred, pred);
   const calibration = buildQualityCalibration();
 
@@ -714,6 +731,22 @@ function calibratedConfidence(game, pred) {
 }
 
 function pickStrength(pred, game = pred) {
+  if (!pred) {
+    return {
+      label: "Calculating",
+      detail: "Waiting for data",
+      className: "warn"
+    };
+  }
+
+  if (pred.noPick === true || pred.qualified === false) {
+    return {
+      label: "No Pick",
+      detail: pred.noPickReason || "Skipped by qualified-pick filter",
+      className: "warn"
+    };
+  }
+
   const c = calibratedConfidence(game, pred);
 
   if (c >= 68) {
@@ -759,7 +792,7 @@ function pickQualityData(game, pred) {
   const base = basePickQualityData(game, pred);
   const calibration = buildQualityCalibration();
 
-  if (!pred || !calibration.ready) return base;
+  if (!pred || pred.noPick === true || pred.qualified === false || !calibration.ready) return base;
 
   const bucket = calibration.buckets[base.key];
 
@@ -793,6 +826,8 @@ function pickQualityData(game, pred) {
 function openBestBoardGames() {
   return allVisibleGames()
     .filter(game => game.prediction)
+    .filter(game => game.prediction.qualified !== false)
+    .filter(game => game.prediction.noPick !== true)
     .filter(game => !game.prediction.locked)
     .filter(game => !isFinalStatus(game.status))
     .sort((a, b) => {
@@ -894,7 +929,7 @@ function render() {
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
   setText(
     "#bestFilterNote",
-    `${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`
+    `${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} qualified open picks.`
   );
 
   renderDailySummary();
@@ -916,22 +951,26 @@ function render() {
 function renderDailySummary() {
   const todayGames = state?.todayGames || [];
   const todayPredictions = todayGames.filter(game => game.prediction);
-  const openToday = todayPredictions.filter(game => {
-    return !game.prediction.locked && !isFinalStatus(game.status);
+  const qualifiedToday = todayPredictions.filter(game => {
+    return game.prediction.qualified !== false &&
+      game.prediction.noPick !== true &&
+      !game.prediction.locked &&
+      !isFinalStatus(game.status);
   });
 
-  const bestToday = openToday
+  const bestToday = qualifiedToday
     .slice()
     .sort((a, b) => calibratedConfidence(b, b.prediction) - calibratedConfidence(a, a.prediction))[0];
 
   const fallbackBest = todayPredictions
+    .filter(game => game.prediction.qualified !== false && game.prediction.noPick !== true)
     .slice()
     .sort((a, b) => calibratedConfidence(b, b.prediction) - calibratedConfidence(a, a.prediction))[0];
 
   const bestGame = bestToday || fallbackBest;
 
-  const strongCount = openToday.filter(game => calibratedConfidence(game, game.prediction) >= 68).length;
-  const goodCount = openToday.filter(game => calibratedConfidence(game, game.prediction) >= 60).length;
+  const strongCount = qualifiedToday.filter(game => calibratedConfidence(game, game.prediction) >= 68).length;
+  const goodCount = qualifiedToday.filter(game => calibratedConfidence(game, game.prediction) >= 60).length;
   const lockedCount = todayPredictions.filter(game => game.prediction.locked).length;
   const pendingCount = todayPredictions.filter(game => !game.prediction.result).length;
 
@@ -941,7 +980,7 @@ function renderDailySummary() {
     "#summaryBestPick",
     bestGame
       ? `${bestGame.prediction.predictedWinnerName} ${calibratedConfidence(bestGame, bestGame.prediction)}%`
-      : "--"
+      : "No qualified pick yet"
   );
 
   setText("#summaryStrong", strongCount);
@@ -1024,6 +1063,7 @@ function renderQualityAccuracy() {
 
     if (!result) return;
     if (result.counted === false) return;
+    if (pred.noPick === true || pred.qualified === false) return;
 
     const quality = pickQualityData(pred, pred);
     const key = buckets[quality.key] ? quality.key : "risky";
@@ -1066,8 +1106,8 @@ function renderModelReport() {
   const predictions = state?.predictions || [];
 
   const graded = predictions.filter(pred => pred.result);
-  const excluded = graded.filter(pred => pred.result?.counted === false);
-  const counted = graded.filter(pred => pred.result?.counted !== false);
+  const excluded = graded.filter(pred => pred.result?.counted !== true);
+  const counted = graded.filter(pred => pred.result?.counted === true);
   const correct = counted.filter(pred => pred.result?.correct);
   const wrong = counted.filter(pred => !pred.result?.correct);
 
@@ -1109,17 +1149,9 @@ function renderModelReport() {
 
   let modelStatus = "Collecting Data";
 
-  if (counted.length >= 50) {
-    modelStatus = "Calibrating";
-  }
-
-  if (counted.length >= 100) {
-    modelStatus = "Stronger Sample";
-  }
-
-  if (counted.length >= 200) {
-    modelStatus = "Strong Sample";
-  }
+  if (counted.length >= 50) modelStatus = "Qualified Pick Calibration";
+  if (counted.length >= 100) modelStatus = "Stronger Sample";
+  if (counted.length >= 200) modelStatus = "Strong Sample";
 
   setText("#reportGradedGames", graded.length);
   setText("#reportCorrectPicks", correct.length);
@@ -1137,6 +1169,7 @@ function pitcherText(pitcher) {
   const parts = [];
 
   if (pitcher.name) parts.push(pitcher.name);
+  if (pitcher.pitchHand) parts.push(pitcher.pitchHand);
   if (pitcher.era != null) parts.push(`ERA ${number(pitcher.era, 2)}`);
   if (pitcher.whip != null) parts.push(`WHIP ${number(pitcher.whip, 2)}`);
   if (pitcher.recentEra != null) parts.push(`Recent ERA ${number(pitcher.recentEra, 2)}`);
@@ -1164,7 +1197,7 @@ function pickQualityCard(game, pred) {
 
   return `
     <div class="pickQuality ${escapeHtml(quality.className)}">
-      <span>Calibrated Pick Quality</span>
+      <span>${pred?.noPick || pred?.qualified === false ? "Qualified Pick Filter" : "Calibrated Pick Quality"}</span>
       <strong>${escapeHtml(quality.label)}</strong>
       <small>${escapeHtml(quality.detail)}</small>
     </div>
@@ -1221,9 +1254,9 @@ function breakdownLine(label, value, game, pred) {
   const picked = pred?.predictedWinnerName || "";
   let className = "warn";
 
-  if (winner !== "Close" && picked && winner === picked) {
+  if (winner !== "Close" && picked && !picked.includes("No Pick") && winner === picked) {
     className = "good";
-  } else if (winner !== "Close" && picked && winner !== picked) {
+  } else if (winner !== "Close" && picked && !picked.includes("No Pick") && winner !== picked) {
     className = "bad";
   }
 
@@ -1247,6 +1280,11 @@ function confidenceBreakdown(game, pred) {
       <summary>Confidence Breakdown</summary>
 
       <div class="confidenceBreakdown">
+        <div class="breakdownLine ${pred.noPick || pred.qualified === false ? "warn" : "good"}">
+          <span>Qualified Status</span>
+          <strong>${escapeHtml(pred.noPick || pred.qualified === false ? (pred.noPickReason || "No Pick") : "Qualified Pick")}</strong>
+        </div>
+
         <div class="breakdownLine good">
           <span>Raw Confidence</span>
           <strong>${escapeHtml(rawConfidence)}%</strong>
@@ -1267,6 +1305,7 @@ function edgeClass(text) {
   const t = String(text || "").toLowerCase();
 
   if (
+    t.includes("qualified") ||
     t.includes("better") ||
     t.includes("stronger") ||
     t.includes("scores more") ||
@@ -1274,7 +1313,8 @@ function edgeClass(text) {
     t.includes("edge") ||
     t.includes("form") ||
     t.includes("pitcher") ||
-    t.includes("bullpen")
+    t.includes("bullpen") ||
+    t.includes("lineup")
   ) {
     return "good";
   }
@@ -1284,6 +1324,10 @@ function edgeClass(text) {
 
 function lockBadge(pred) {
   if (!pred) return "";
+
+  if (pred.noPick === true || pred.qualified === false) {
+    return `<span class="edgeChip warn">Skipped</span>`;
+  }
 
   if (pred.locked) {
     return `<span class="edgeChip warn">🔒 Locked</span>`;
@@ -1300,13 +1344,13 @@ function renderBestBoard(games) {
   if (!games.length) {
     container.innerHTML = `
       <div class="noData">
-        No picks match this filter right now. Try All, or sync again after more games load.
+        No qualified picks match this filter right now. That is good if the board is messy — the app is skipping weak games.
       </div>
     `;
     return;
   }
 
-  renderGames("#bestPicks", games.slice(0, 8), "No best picks loaded yet.");
+  renderGames("#bestPicks", games.slice(0, 8), "No qualified best picks loaded yet.");
 }
 
 function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap Sync.") {
@@ -1326,8 +1370,8 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
   container.innerHTML = games.map((game, index) => {
     const pred = game.prediction;
     const pickId = String(pred?.predictedWinnerTeamId || "");
-    const awayPick = pickId === String(game.awayTeamId);
-    const homePick = pickId === String(game.homeTeamId);
+    const awayPick = pickId && pickId === String(game.awayTeamId);
+    const homePick = pickId && pickId === String(game.homeTeamId);
     const confidence = Math.max(0, Math.min(100, calibratedConfidence(game, pred)));
     const rawConfidence = Number(pred?.confidence || 0);
     const reasons = pred?.reasons || ["Waiting for enough matchup data"];
@@ -1336,7 +1380,9 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
     let pillText = game.status || "Scheduled";
 
     if (isBestBoard) {
-      pillText = `#${index + 1} Best`;
+      pillText = `#${index + 1} Qualified`;
+    } else if (pred?.noPick || pred?.qualified === false) {
+      pillText = "No Pick";
     } else if (pred?.locked) {
       pillText = "🔒 Locked";
     }
@@ -1374,7 +1420,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
           </div>
 
           <div class="pickBox">
-            <div class="pickLabel">Auto Pick</div>
+            <div class="pickLabel">${pred?.noPick || pred?.qualified === false ? "Qualified Filter" : "Auto Pick"}</div>
             <div class="pickName">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</div>
 
             <div class="projectedScore">
@@ -1401,7 +1447,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
             <div class="edgeList">
               ${strengthBadge(pred, game)}
               ${lockBadge(pred)}
-              ${reasons.slice(0, 7).map(reason => `
+              ${reasons.slice(0, 8).map(reason => `
                 <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
               `).join("")}
             </div>
@@ -1434,7 +1480,7 @@ function renderMatchups() {
       <article class="breakdownCard">
         <h3>${escapeHtml(game.awayTeamName)} @ ${escapeHtml(game.homeTeamName)}</h3>
         <p>
-          Auto pick:
+          Auto result:
           <strong class="goldText">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</strong>
           ${pred ? `with ${escapeHtml(calibratedConfidence(game, pred))}% calibrated confidence.` : ""}
         </p>
@@ -1469,13 +1515,13 @@ function renderMatchups() {
           </div>
 
           <div class="factor">
-            <span>Rest / Bullpen</span>
-            <strong>${escapeHtml(edgeWinner(combinedEdge([f.restEdge, f.bullpenFatigue]), game))}</strong>
+            <span>Lineup / Splits</span>
+            <strong>${escapeHtml(edgeWinner(combinedEdge([f.lineupStrength, f.handednessSplit]), game))}</strong>
           </div>
 
           <div class="factor">
-            <span>Head-to-Head</span>
-            <strong>${escapeHtml(edgeWinner(f.h2h, game))}</strong>
+            <span>Rest / Bullpen</span>
+            <strong>${escapeHtml(edgeWinner(combinedEdge([f.restEdge, f.bullpenFatigue]), game))}</strong>
           </div>
         </div>
 
@@ -1547,7 +1593,7 @@ function renderAutoSources() {
       <article class="autoCard">
         <h3>${escapeHtml(game.awayTeamName)} @ ${escapeHtml(game.homeTeamName)}</h3>
         <p>
-          Pick:
+          Result:
           <strong class="goldText">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</strong>
           • Projected:
           <strong>${escapeHtml(predictedScore(game, pred))}</strong>
@@ -1566,7 +1612,7 @@ function renderAutoSources() {
 
         ${refs.length ? `
           <div class="factorGrid">
-            ${refs.slice(0, 10).map(ref => `
+            ${refs.slice(0, 12).map(ref => `
               <div class="factor">
                 <span>${escapeHtml(ref.title || ref.dataType || "Auto Factor")}</span>
                 <strong>${escapeHtml(ref.edgeTeamName || "Close")}</strong>
@@ -1580,8 +1626,9 @@ function renderAutoSources() {
         <p>
           Auto inputs used: schedule, team record, home/away split, scoring trends,
           run prevention, run differential, probable pitchers, starter recent form,
+          pitcher handedness, batting splits, announced lineup strength when available,
           recent team form, head-to-head history, rest days, bullpen fatigue estimate,
-          previous results, calibration, and stored model learning.
+          weather/park estimate, previous results, calibration, and stored model learning.
         </p>
       </article>
     `;
@@ -1605,7 +1652,7 @@ function renderResults() {
 
   container.innerHTML = predictions.map(pred => {
     const result = pred.result;
-    const counted = result?.counted !== false;
+    const counted = result?.counted === true;
     const confidence = calibratedConfidence(pred, pred);
 
     const badge = result
@@ -1616,7 +1663,7 @@ function renderResults() {
 
     const countedBadge = result
       ? `<span class="edgeChip ${counted ? "good" : "warn"}">
-          ${counted ? "Counted in accuracy" : "Training / excluded"}
+          ${counted ? "Qualified / counted" : "No Pick / excluded"}
         </span>`
       : "";
 
@@ -1625,7 +1672,7 @@ function renderResults() {
         <h3>${escapeHtml(pred.awayTeamName)} @ ${escapeHtml(pred.homeTeamName)}</h3>
         <p>
           Date: ${escapeHtml(prettyDate(pred.date))}
-          • Pick: <strong class="goldText">${escapeHtml(pred.predictedWinnerName)}</strong>
+          • Result: <strong class="goldText">${escapeHtml(pred.predictedWinnerName)}</strong>
           • Calibrated Confidence: <strong>${escapeHtml(confidence)}%</strong>
         </p>
 
@@ -1649,7 +1696,7 @@ function renderResults() {
           ${countedBadge}
         </div>
 
-        ${badge}
+        ${pred.qualified ? badge : `<span class="resultBadge">No Pick</span>`}
       </article>
     `;
   }).join("");
