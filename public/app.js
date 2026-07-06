@@ -2,6 +2,7 @@ let state = null;
 let bestFilter = "all";
 let qualityFilter = "all";
 let bestSort = "confidence";
+let volumeFilter = "5";
 let lastSyncAt = null;
 let nextAutoSyncAt = null;
 let currentRefreshStatus = "Ready";
@@ -200,6 +201,20 @@ function qualityMeta(key) {
   };
 }
 
+function volumeLimit() {
+  if (volumeFilter === "3") return 3;
+  if (volumeFilter === "5") return 5;
+  if (volumeFilter === "8") return 8;
+  return Infinity;
+}
+
+function volumeLabel() {
+  if (volumeFilter === "3") return "Best 3";
+  if (volumeFilter === "5") return "Best 5";
+  if (volumeFilter === "8") return "Best 8";
+  return "All Qualified";
+}
+
 function bestFilterMinimum() {
   if (bestFilter === "strong") return 68;
   if (bestFilter === "good") return 60;
@@ -300,6 +315,17 @@ function setupTabs() {
 }
 
 function setupBestFilters() {
+  $$("#volumeFilters .filterBtn").forEach(button => {
+    button.addEventListener("click", () => {
+      volumeFilter = button.dataset.volume || "5";
+
+      $$("#volumeFilters .filterBtn").forEach(b => b.classList.remove("active"));
+      button.classList.add("active");
+
+      render();
+    });
+  });
+
   $$("#confidenceFilters .filterBtn").forEach(button => {
     button.addEventListener("click", () => {
       bestFilter = button.dataset.filter || "all";
@@ -834,20 +860,30 @@ function sortedBestBoardGames(games) {
   return copy;
 }
 
-function filteredBestBoardGames() {
+function qualifiedFilteredGamesBeforeVolume() {
   const min = bestFilterMinimum();
 
-  const filtered = openBestBoardGames()
-    .filter(game => calibratedConfidence(game, game.prediction) >= min)
-    .filter(game => passesQualityFilter(game));
+  return sortedBestBoardGames(
+    openBestBoardGames()
+      .filter(game => calibratedConfidence(game, game.prediction) >= min)
+      .filter(game => passesQualityFilter(game))
+  );
+}
 
-  return sortedBestBoardGames(filtered);
+function filteredBestBoardGames() {
+  const filtered = qualifiedFilteredGamesBeforeVolume();
+  const limit = volumeLimit();
+
+  if (!Number.isFinite(limit)) return filtered;
+
+  return filtered.slice(0, limit);
 }
 
 function render() {
   if (!state) return;
 
   const allOpenBest = openBestBoardGames();
+  const beforeVolume = qualifiedFilteredGamesBeforeVolume();
   const bestGames = filteredBestBoardGames();
   const topConfidence = allOpenBest[0]?.prediction
     ? calibratedConfidence(allOpenBest[0], allOpenBest[0].prediction)
@@ -867,10 +903,10 @@ function render() {
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
   setText(
     "#bestFilterNote",
-    `${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} qualified open picks.`
+    `${volumeLabel()}. ${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${beforeVolume.length} filtered qualified picks. ${allOpenBest.length} total open qualified.`
   );
 
-  renderDailySummary();
+  renderDailySummary(bestGames, beforeVolume);
   renderRefreshStatus();
   renderDataHealth();
   renderQualityAccuracy();
@@ -890,7 +926,7 @@ function render() {
   renderModel();
 }
 
-function renderDailySummary() {
+function renderDailySummary(bestGames = filteredBestBoardGames(), beforeVolume = qualifiedFilteredGamesBeforeVolume()) {
   const todayGames = state?.todayGames || [];
   const todayPredictions = todayGames.filter(game => game.prediction);
   const qualifiedToday = todayPredictions.filter(game => {
@@ -927,6 +963,8 @@ function renderDailySummary() {
 
   setText("#summaryStrong", strongCount);
   setText("#summaryGood", goodCount);
+  setText("#summaryVolume", volumeLabel());
+  setText("#summaryDisplayed", `${bestGames.length}/${beforeVolume.length}`);
   setText("#summaryLocked", lockedCount);
   setText("#summaryPending", pendingCount);
   setText("#summaryAccuracy", accuracy == null ? "--" : `${accuracy}%`);
@@ -1550,7 +1588,7 @@ function renderBestBoard(games) {
     return;
   }
 
-  renderGames("#bestPicks", games.slice(0, 8), "No qualified best picks loaded yet.");
+  renderGames("#bestPicks", games, "No qualified best picks loaded yet.");
 }
 
 function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap Sync.") {
@@ -1580,7 +1618,7 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
     let pillText = game.status || "Scheduled";
 
     if (isBestBoard) {
-      pillText = `#${index + 1} Qualified`;
+      pillText = `#${index + 1} ${volumeLabel()}`;
     } else if (pred?.noPick || pred?.qualified === false) {
       pillText = "No Pick";
     } else if (pred?.locked) {
