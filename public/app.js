@@ -11,6 +11,7 @@ let lastErrorMessage = "None";
 let failedSyncs = 0;
 let nextRetryAt = null;
 let deferredInstallPrompt = null;
+let qualityCalibrationCache = null;
 
 const FRONTEND_SYNC_MS = 15 * 60 * 1000;
 const CACHE_KEY = "mlb-edge-dashboard-cache";
@@ -21,6 +22,10 @@ const $$ = selector => Array.from(document.querySelectorAll(selector));
 function setText(selector, value) {
   const el = $(selector);
   if (el) el.textContent = value;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function escapeHtml(value) {
@@ -103,6 +108,10 @@ function loadDashboardCache() {
   }
 }
 
+function clearQualityCalibration() {
+  qualityCalibrationCache = null;
+}
+
 function setStatus(text, mode = "ready") {
   currentRefreshStatus = text;
 
@@ -122,46 +131,66 @@ function setStatus(text, mode = "ready") {
   renderSafetyMonitor();
 }
 
-function pickStrength(confidence) {
-  const c = Number(confidence || 0);
+function qualityRank(key) {
+  const ranks = {
+    elite: 5,
+    strong: 4,
+    good: 3,
+    lean: 2,
+    risky: 1
+  };
 
-  if (c >= 68) {
+  return ranks[key] || 1;
+}
+
+function rankToQualityKey(rank) {
+  const safeRank = clamp(Math.round(rank), 1, 5);
+
+  if (safeRank === 5) return "elite";
+  if (safeRank === 4) return "strong";
+  if (safeRank === 3) return "good";
+  if (safeRank === 2) return "lean";
+  return "risky";
+}
+
+function qualityMeta(key) {
+  if (key === "elite") {
     return {
+      key,
+      label: "🏆 Elite Edge",
+      className: "qualityElite"
+    };
+  }
+
+  if (key === "strong") {
+    return {
+      key,
       label: "🔥 Strong Edge",
-      detail: "Highest confidence automatic edge",
-      className: "good"
+      className: "qualityStrong"
     };
   }
 
-  if (c >= 60) {
+  if (key === "good") {
     return {
+      key,
       label: "✅ Good Edge",
-      detail: "Solid calculated edge",
-      className: "good"
+      className: "qualityGood"
     };
   }
 
-  if (c >= 54) {
+  if (key === "lean") {
     return {
+      key,
       label: "⚠️ Lean",
-      detail: "Small calculated edge",
-      className: "warn"
+      className: "qualityLean"
     };
   }
 
   return {
-    label: "🧊 Toss Up",
-    detail: "Very close matchup",
-    className: "warn"
+    key: "risky",
+    label: "🧊 Risky / Toss Up",
+    className: "qualityRisky"
   };
-}
-
-function strengthBadge(pred) {
-  if (!pred) return `<span class="edgeChip warn">Calculating strength</span>`;
-
-  const strength = pickStrength(pred.confidence);
-
-  return `<span class="edgeChip ${strength.className}" title="${escapeHtml(strength.detail)}">${escapeHtml(strength.label)}</span>`;
 }
 
 function bestFilterMinimum() {
@@ -190,7 +219,7 @@ function sortFilterLabel() {
   if (bestSort === "quality") return "Sort: Best quality.";
   if (bestSort === "time") return "Sort: Game time.";
   if (bestSort === "edge") return "Sort: Strongest edge score.";
-  return "Sort: Highest confidence.";
+  return "Sort: Highest calibrated confidence.";
 }
 
 async function getJson(url) {
@@ -216,6 +245,7 @@ async function load(sync = false) {
       : await getJson("/api/dashboard");
 
     state = data.dashboard || data;
+    clearQualityCalibration();
 
     lastSyncAt = new Date();
     lastGoodLoadAt = new Date();
@@ -239,6 +269,7 @@ async function load(sync = false) {
 
     if (cached) {
       state = cached;
+      clearQualityCalibration();
       render();
       setStatus("Using cached data", "error");
     } else {
@@ -337,381 +368,6 @@ function allVisibleGames() {
     ...(state?.todayGames || []),
     ...(state?.tomorrowGames || [])
   ];
-}
-
-function openBestBoardGames() {
-  return allVisibleGames()
-    .filter(game => game.prediction)
-    .filter(game => !game.prediction.locked)
-    .filter(game => !isFinalStatus(game.status))
-    .sort((a, b) => {
-      const ac = Number(a.prediction?.confidence || 0);
-      const bc = Number(b.prediction?.confidence || 0);
-
-      if (bc !== ac) return bc - ac;
-
-      return String(a.gameDate).localeCompare(String(b.gameDate));
-    });
-}
-
-function qualityRank(key) {
-  const ranks = {
-    elite: 5,
-    strong: 4,
-    good: 3,
-    lean: 2,
-    risky: 1
-  };
-
-  return ranks[key] || 0;
-}
-
-function passesQualityFilter(game) {
-  if (qualityFilter === "all") return true;
-
-  const quality = pickQualityData(game, game.prediction);
-  const rank = qualityRank(quality.key);
-
-  if (qualityFilter === "elite") return quality.key === "elite";
-  if (qualityFilter === "strong") return rank >= qualityRank("strong");
-  if (qualityFilter === "good") return rank >= qualityRank("good");
-  if (qualityFilter === "lean") return rank >= qualityRank("lean");
-
-  return true;
-}
-
-function sortedBestBoardGames(games) {
-  const copy = games.slice();
-
-  copy.sort((a, b) => {
-    const aConf = Number(a.prediction?.confidence || 0);
-    const bConf = Number(b.prediction?.confidence || 0);
-    const aQuality = qualityRank(pickQualityData(a, a.prediction).key);
-    const bQuality = qualityRank(pickQualityData(b, b.prediction).key);
-    const aEdge = strengthSummaryData(a, a.prediction).score;
-    const bEdge = strengthSummaryData(b, b.prediction).score;
-    const aTime = new Date(a.gameDate || 0).getTime();
-    const bTime = new Date(b.gameDate || 0).getTime();
-
-    if (bestSort === "quality") {
-      if (bQuality !== aQuality) return bQuality - aQuality;
-      if (bConf !== aConf) return bConf - aConf;
-      if (bEdge !== aEdge) return bEdge - aEdge;
-      return aTime - bTime;
-    }
-
-    if (bestSort === "time") {
-      if (aTime !== bTime) return aTime - bTime;
-      if (bConf !== aConf) return bConf - aConf;
-      return bEdge - aEdge;
-    }
-
-    if (bestSort === "edge") {
-      if (bEdge !== aEdge) return bEdge - aEdge;
-      if (bConf !== aConf) return bConf - aConf;
-      if (bQuality !== aQuality) return bQuality - aQuality;
-      return aTime - bTime;
-    }
-
-    if (bConf !== aConf) return bConf - aConf;
-    if (bQuality !== aQuality) return bQuality - aQuality;
-    if (bEdge !== aEdge) return bEdge - aEdge;
-    return aTime - bTime;
-  });
-
-  return copy;
-}
-
-function filteredBestBoardGames() {
-  const min = bestFilterMinimum();
-
-  const filtered = openBestBoardGames()
-    .filter(game => Number(game.prediction?.confidence || 0) >= min)
-    .filter(game => passesQualityFilter(game));
-
-  return sortedBestBoardGames(filtered);
-}
-
-function render() {
-  if (!state) return;
-
-  const allOpenBest = openBestBoardGames();
-  const bestGames = filteredBestBoardGames();
-  const topConfidence = allOpenBest[0]?.prediction?.confidence;
-
-  setText("#todayCount", state.todayGames?.length || 0);
-  setText("#tomorrowCount", state.tomorrowGames?.length || 0);
-  setText("#predictionCount", state.predictions?.length || 0);
-  setText("#trainedGames", state.model?.trainedGames || 0);
-  setText("#topConfidence", topConfidence ? `${topConfidence}%` : "--");
-
-  const accuracy = state.accuracy?.accuracy;
-  const excluded = state.accuracy?.excluded || 0;
-  setText("#accuracy", accuracy == null ? "--" : `${accuracy}%${excluded ? ` (${excluded} excluded)` : ""}`);
-
-  setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
-  setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
-  setText(
-    "#bestFilterNote",
-    `${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`
-  );
-
-  renderDailySummary();
-  renderRefreshStatus();
-  renderDataHealth();
-  renderQualityAccuracy();
-  renderSafetyMonitor();
-  renderBestBoard(bestGames);
-  renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
-  renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
-  renderMatchups();
-  renderTeams();
-  renderAutoSources();
-  renderResults();
-  renderModelReport();
-  renderModel();
-}
-
-function renderDailySummary() {
-  const todayGames = state?.todayGames || [];
-  const todayPredictions = todayGames.filter(game => game.prediction);
-  const openToday = todayPredictions.filter(game => {
-    return !game.prediction.locked && !isFinalStatus(game.status);
-  });
-
-  const bestToday = openToday
-    .slice()
-    .sort((a, b) => Number(b.prediction.confidence || 0) - Number(a.prediction.confidence || 0))[0];
-
-  const fallbackBest = todayPredictions
-    .slice()
-    .sort((a, b) => Number(b.prediction.confidence || 0) - Number(a.prediction.confidence || 0))[0];
-
-  const bestGame = bestToday || fallbackBest;
-
-  const strongCount = openToday.filter(game => Number(game.prediction.confidence || 0) >= 68).length;
-  const goodCount = openToday.filter(game => Number(game.prediction.confidence || 0) >= 60).length;
-  const lockedCount = todayPredictions.filter(game => game.prediction.locked).length;
-  const pendingCount = todayPredictions.filter(game => !game.prediction.result).length;
-
-  const accuracy = state.accuracy?.accuracy;
-
-  setText(
-    "#summaryBestPick",
-    bestGame
-      ? `${bestGame.prediction.predictedWinnerName} ${bestGame.prediction.confidence}%`
-      : "--"
-  );
-
-  setText("#summaryStrong", strongCount);
-  setText("#summaryGood", goodCount);
-  setText("#summaryLocked", lockedCount);
-  setText("#summaryPending", pendingCount);
-  setText("#summaryAccuracy", accuracy == null ? "--" : `${accuracy}%`);
-}
-
-function renderRefreshStatus() {
-  setText("#refreshLastSync", lastSyncAt ? formatClock(lastSyncAt) : "--");
-  setText("#refreshNextSync", nextAutoSyncAt ? formatClock(nextAutoSyncAt) : "--");
-  setText("#refreshFrontend", "15 min");
-  setText("#refreshBackend", "Hourly");
-  setText("#refreshStorage", state ? "Saved DB active" : "Checking");
-  setText("#refreshStatus", currentRefreshStatus || "Ready");
-}
-
-function renderDataHealth() {
-  const todayGames = state?.todayGames || [];
-  const tomorrowGames = state?.tomorrowGames || [];
-  const predictions = state?.predictions || [];
-  const logs = state?.logs || [];
-
-  const storedGames = todayGames.length + tomorrowGames.length;
-  const predictionCount = predictions.length;
-  const latestLog = logs[0];
-  const latestBackendSync = latestLog?.at ? formatClock(latestLog.at) : lastSyncAt ? formatClock(lastSyncAt) : "--";
-
-  const apiStatus = state ? "Connected" : "Checking";
-  const dbStatus = state?.model ? "Working" : state ? "Loaded" : "Checking";
-
-  setText("#healthApi", apiStatus);
-  setText("#healthDb", dbStatus);
-  setText("#healthGames", storedGames);
-  setText("#healthPredictions", predictionCount);
-  setText("#healthBackendSync", latestBackendSync);
-  setText("#healthStoragePath", "/var/data");
-}
-
-function renderSafetyMonitor() {
-  const cached = state || loadDashboardCache();
-  const recoveryStatus = failedSyncs === 0
-    ? "Ready"
-    : cached
-      ? "Using cached data"
-      : "Waiting for retry";
-
-  setText("#safeLastGood", lastGoodLoadAt ? formatClock(lastGoodLoadAt) : "--");
-  setText("#safeLastError", lastErrorMessage || "None");
-  setText("#safeCachedData", cached ? "Available" : "None");
-  setText("#safeFailedSyncs", failedSyncs);
-  setText("#safeRecoveryStatus", recoveryStatus);
-  setText("#safeNextRetry", nextRetryAt ? formatClock(nextRetryAt) : "--");
-}
-
-function qualityAccuracyText(bucket) {
-  if (!bucket.total) return "--";
-
-  const accuracy = Math.round((bucket.correct / bucket.total) * 100);
-
-  return `${accuracy}% (${bucket.correct}/${bucket.total})`;
-}
-
-function renderQualityAccuracy() {
-  const predictions = state?.predictions || [];
-
-  const buckets = {
-    elite: { correct: 0, total: 0 },
-    strong: { correct: 0, total: 0 },
-    good: { correct: 0, total: 0 },
-    lean: { correct: 0, total: 0 },
-    risky: { correct: 0, total: 0 }
-  };
-
-  let countedGames = 0;
-
-  predictions.forEach(pred => {
-    const result = pred.result;
-
-    if (!result) return;
-    if (result.counted === false) return;
-
-    const quality = pickQualityData(pred, pred);
-    const key = buckets[quality.key] ? quality.key : "risky";
-
-    buckets[key].total += 1;
-    countedGames += 1;
-
-    if (result.correct) {
-      buckets[key].correct += 1;
-    }
-  });
-
-  setText("#qualityEliteAccuracy", qualityAccuracyText(buckets.elite));
-  setText("#qualityStrongAccuracy", qualityAccuracyText(buckets.strong));
-  setText("#qualityGoodAccuracy", qualityAccuracyText(buckets.good));
-  setText("#qualityLeanAccuracy", qualityAccuracyText(buckets.lean));
-  setText("#qualityRiskyAccuracy", qualityAccuracyText(buckets.risky));
-  setText("#qualityCountedGames", countedGames);
-}
-
-function average(values) {
-  const usable = values
-    .map(value => Number(value))
-    .filter(value => Number.isFinite(value));
-
-  if (!usable.length) return null;
-
-  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
-}
-
-function qualityName(key) {
-  if (key === "elite") return "🏆 Elite";
-  if (key === "strong") return "🔥 Strong";
-  if (key === "good") return "✅ Good";
-  if (key === "lean") return "⚠️ Lean";
-  return "🧊 Risky";
-}
-
-function renderModelReport() {
-  const predictions = state?.predictions || [];
-
-  const graded = predictions.filter(pred => pred.result);
-  const excluded = graded.filter(pred => pred.result?.counted === false);
-  const counted = graded.filter(pred => pred.result?.counted !== false);
-  const correct = counted.filter(pred => pred.result?.correct);
-  const wrong = counted.filter(pred => !pred.result?.correct);
-
-  const avgCorrect = average(correct.map(pred => pred.confidence));
-  const avgWrong = average(wrong.map(pred => pred.confidence));
-
-  const buckets = {
-    elite: { correct: 0, total: 0 },
-    strong: { correct: 0, total: 0 },
-    good: { correct: 0, total: 0 },
-    lean: { correct: 0, total: 0 },
-    risky: { correct: 0, total: 0 }
-  };
-
-  counted.forEach(pred => {
-    const quality = pickQualityData(pred, pred);
-    const key = buckets[quality.key] ? quality.key : "risky";
-
-    buckets[key].total += 1;
-
-    if (pred.result?.correct) {
-      buckets[key].correct += 1;
-    }
-  });
-
-  let bestQuality = "--";
-  let bestRate = -1;
-
-  Object.entries(buckets).forEach(([key, bucket]) => {
-    if (!bucket.total) return;
-
-    const rate = bucket.correct / bucket.total;
-
-    if (rate > bestRate) {
-      bestRate = rate;
-      bestQuality = `${qualityName(key)} ${Math.round(rate * 100)}% (${bucket.correct}/${bucket.total})`;
-    }
-  });
-
-  let modelStatus = "Collecting Data";
-
-  if (counted.length >= 50) {
-    modelStatus = "Strong Sample";
-  } else if (counted.length >= 25) {
-    modelStatus = "Learning Well";
-  } else if (counted.length >= 10) {
-    modelStatus = "Early Learning";
-  }
-
-  setText("#reportGradedGames", graded.length);
-  setText("#reportCorrectPicks", correct.length);
-  setText("#reportWrongPicks", wrong.length);
-  setText("#reportExcludedGames", excluded.length);
-  setText("#reportAvgConfidenceCorrect", avgCorrect == null ? "--" : `${Math.round(avgCorrect)}%`);
-  setText("#reportAvgConfidenceWrong", avgWrong == null ? "--" : `${Math.round(avgWrong)}%`);
-  setText("#reportBestQuality", bestQuality);
-  setText("#reportModelStatus", modelStatus);
-}
-
-function pitcherText(pitcher) {
-  if (!pitcher) return "Starter: TBD";
-
-  const parts = [];
-
-  if (pitcher.name) parts.push(pitcher.name);
-  if (pitcher.era != null) parts.push(`ERA ${number(pitcher.era, 2)}`);
-  if (pitcher.whip != null) parts.push(`WHIP ${number(pitcher.whip, 2)}`);
-  if (pitcher.recentEra != null) parts.push(`Recent ERA ${number(pitcher.recentEra, 2)}`);
-
-  return parts.length ? parts.join(" • ") : "Starter: TBD";
-}
-
-function predictedScore(game, pred) {
-  if (!pred) return "--";
-  return `${pred.projectedAwayScore ?? "--"} - ${pred.projectedHomeScore ?? "--"}`;
-}
-
-function actualOrProjectedScore(game, side, pred) {
-  const actual = side === "away" ? game.awayScore : game.homeScore;
-  const projected = side === "away" ? pred?.projectedAwayScore : pred?.projectedHomeScore;
-
-  if (actual != null) return actual;
-  if (projected != null) return projected;
-
-  return "--";
 }
 
 function finiteNumber(value) {
@@ -866,7 +522,7 @@ function strengthSummaryData(game, pred) {
   };
 }
 
-function pickQualityData(game, pred) {
+function basePickQualityData(game, pred) {
   if (!pred) {
     return {
       key: "risky",
@@ -958,12 +614,557 @@ function pickQualityData(game, pred) {
   };
 }
 
+function buildQualityCalibration() {
+  if (qualityCalibrationCache) return qualityCalibrationCache;
+
+  const buckets = {
+    elite: { correct: 0, total: 0 },
+    strong: { correct: 0, total: 0 },
+    good: { correct: 0, total: 0 },
+    lean: { correct: 0, total: 0 },
+    risky: { correct: 0, total: 0 }
+  };
+
+  const predictions = state?.predictions || [];
+
+  predictions.forEach(pred => {
+    const result = pred.result;
+
+    if (!result) return;
+    if (result.counted === false) return;
+
+    const rawQuality = basePickQualityData(pred, pred);
+    const key = buckets[rawQuality.key] ? rawQuality.key : "risky";
+
+    buckets[key].total += 1;
+
+    if (result.correct) {
+      buckets[key].correct += 1;
+    }
+  });
+
+  const counted = Object.values(buckets).reduce((sum, bucket) => sum + bucket.total, 0);
+
+  qualityCalibrationCache = {
+    buckets,
+    counted,
+    ready: counted >= 30
+  };
+
+  return qualityCalibrationCache;
+}
+
+function bucketAccuracy(bucket) {
+  if (!bucket || !bucket.total) return null;
+  return bucket.correct / bucket.total;
+}
+
+function calibratedQualityKey(baseKey) {
+  const calibration = buildQualityCalibration();
+
+  if (!calibration.ready) return baseKey;
+
+  const bucket = calibration.buckets[baseKey];
+
+  if (!bucket || bucket.total < 6) return baseKey;
+
+  const accuracy = bucketAccuracy(bucket);
+  let rank = qualityRank(baseKey);
+
+  if (accuracy < 0.48) {
+    rank -= 2;
+  } else if (accuracy < 0.55) {
+    rank -= 1;
+  } else if (accuracy >= 0.64 && bucket.total >= 8) {
+    rank += 1;
+  } else if (accuracy >= 0.60 && rank <= 2 && bucket.total >= 8) {
+    rank += 1;
+  }
+
+  return rankToQualityKey(rank);
+}
+
+function calibratedConfidence(game, pred) {
+  if (!pred) return 0;
+
+  const baseConfidence = Number(pred.confidence || 0);
+
+  if (!Number.isFinite(baseConfidence)) return 0;
+
+  const baseQuality = basePickQualityData(game || pred, pred);
+  const calibration = buildQualityCalibration();
+
+  if (!calibration.ready) return Math.round(baseConfidence);
+
+  const bucket = calibration.buckets[baseQuality.key];
+
+  if (!bucket || bucket.total < 6) return Math.round(baseConfidence);
+
+  const accuracy = bucketAccuracy(bucket);
+  let adjustment = 0;
+
+  if (accuracy < 0.48) adjustment = -12;
+  else if (accuracy < 0.52) adjustment = -8;
+  else if (accuracy < 0.56) adjustment = -5;
+  else if (accuracy >= 0.66) adjustment = 6;
+  else if (accuracy >= 0.62) adjustment = 4;
+  else if (accuracy >= 0.59) adjustment = 2;
+
+  return Math.round(clamp(baseConfidence + adjustment, 51, 86));
+}
+
+function pickStrength(pred, game = pred) {
+  const c = calibratedConfidence(game, pred);
+
+  if (c >= 68) {
+    return {
+      label: "🔥 Strong Edge",
+      detail: "Highest calibrated automatic edge",
+      className: "good"
+    };
+  }
+
+  if (c >= 60) {
+    return {
+      label: "✅ Good Edge",
+      detail: "Solid calibrated edge",
+      className: "good"
+    };
+  }
+
+  if (c >= 54) {
+    return {
+      label: "⚠️ Lean",
+      detail: "Small calculated edge",
+      className: "warn"
+    };
+  }
+
+  return {
+    label: "🧊 Toss Up",
+    detail: "Very close matchup",
+    className: "warn"
+  };
+}
+
+function strengthBadge(pred, game = pred) {
+  if (!pred) return `<span class="edgeChip warn">Calculating strength</span>`;
+
+  const strength = pickStrength(pred, game);
+
+  return `<span class="edgeChip ${strength.className}" title="${escapeHtml(strength.detail)}">${escapeHtml(strength.label)}</span>`;
+}
+
+function pickQualityData(game, pred) {
+  const base = basePickQualityData(game, pred);
+  const calibration = buildQualityCalibration();
+
+  if (!pred || !calibration.ready) return base;
+
+  const bucket = calibration.buckets[base.key];
+
+  if (!bucket || bucket.total < 6) return base;
+
+  const adjustedKey = calibratedQualityKey(base.key);
+  const meta = qualityMeta(adjustedKey);
+  const accuracy = bucketAccuracy(bucket);
+  const accuracyText = accuracy == null ? "--" : `${Math.round(accuracy * 100)}%`;
+  const moved = qualityRank(adjustedKey) > qualityRank(base.key)
+    ? "upgraded"
+    : qualityRank(adjustedKey) < qualityRank(base.key)
+      ? "downgraded"
+      : "confirmed";
+
+  if (adjustedKey === base.key) {
+    return {
+      ...base,
+      detail: `${base.detail} Calibration: ${accuracyText} over ${bucket.total} counted games.`
+    };
+  }
+
+  return {
+    key: adjustedKey,
+    label: meta.label,
+    className: meta.className,
+    detail: `Auto-${moved} from ${base.label} because this bucket is ${accuracyText} over ${bucket.total} counted games.`
+  };
+}
+
+function openBestBoardGames() {
+  return allVisibleGames()
+    .filter(game => game.prediction)
+    .filter(game => !game.prediction.locked)
+    .filter(game => !isFinalStatus(game.status))
+    .sort((a, b) => {
+      const ac = calibratedConfidence(a, a.prediction);
+      const bc = calibratedConfidence(b, b.prediction);
+
+      if (bc !== ac) return bc - ac;
+
+      return String(a.gameDate).localeCompare(String(b.gameDate));
+    });
+}
+
+function passesQualityFilter(game) {
+  if (qualityFilter === "all") return true;
+
+  const quality = pickQualityData(game, game.prediction);
+  const rank = qualityRank(quality.key);
+
+  if (qualityFilter === "elite") return quality.key === "elite";
+  if (qualityFilter === "strong") return rank >= qualityRank("strong");
+  if (qualityFilter === "good") return rank >= qualityRank("good");
+  if (qualityFilter === "lean") return rank >= qualityRank("lean");
+
+  return true;
+}
+
+function sortedBestBoardGames(games) {
+  const copy = games.slice();
+
+  copy.sort((a, b) => {
+    const aConf = calibratedConfidence(a, a.prediction);
+    const bConf = calibratedConfidence(b, b.prediction);
+    const aQuality = qualityRank(pickQualityData(a, a.prediction).key);
+    const bQuality = qualityRank(pickQualityData(b, b.prediction).key);
+    const aEdge = strengthSummaryData(a, a.prediction).score;
+    const bEdge = strengthSummaryData(b, b.prediction).score;
+    const aTime = new Date(a.gameDate || 0).getTime();
+    const bTime = new Date(b.gameDate || 0).getTime();
+
+    if (bestSort === "quality") {
+      if (bQuality !== aQuality) return bQuality - aQuality;
+      if (bConf !== aConf) return bConf - aConf;
+      if (bEdge !== aEdge) return bEdge - aEdge;
+      return aTime - bTime;
+    }
+
+    if (bestSort === "time") {
+      if (aTime !== bTime) return aTime - bTime;
+      if (bConf !== aConf) return bConf - aConf;
+      return bEdge - aEdge;
+    }
+
+    if (bestSort === "edge") {
+      if (bEdge !== aEdge) return bEdge - aEdge;
+      if (bConf !== aConf) return bConf - aConf;
+      if (bQuality !== aQuality) return bQuality - aQuality;
+      return aTime - bTime;
+    }
+
+    if (bConf !== aConf) return bConf - aConf;
+    if (bQuality !== aQuality) return bQuality - aQuality;
+    if (bEdge !== aEdge) return bEdge - aEdge;
+    return aTime - bTime;
+  });
+
+  return copy;
+}
+
+function filteredBestBoardGames() {
+  const min = bestFilterMinimum();
+
+  const filtered = openBestBoardGames()
+    .filter(game => calibratedConfidence(game, game.prediction) >= min)
+    .filter(game => passesQualityFilter(game));
+
+  return sortedBestBoardGames(filtered);
+}
+
+function render() {
+  if (!state) return;
+
+  const allOpenBest = openBestBoardGames();
+  const bestGames = filteredBestBoardGames();
+  const topConfidence = allOpenBest[0]?.prediction
+    ? calibratedConfidence(allOpenBest[0], allOpenBest[0].prediction)
+    : null;
+
+  setText("#todayCount", state.todayGames?.length || 0);
+  setText("#tomorrowCount", state.tomorrowGames?.length || 0);
+  setText("#predictionCount", state.predictions?.length || 0);
+  setText("#trainedGames", state.model?.trainedGames || 0);
+  setText("#topConfidence", topConfidence ? `${topConfidence}%` : "--");
+
+  const accuracy = state.accuracy?.accuracy;
+  const excluded = state.accuracy?.excluded || 0;
+  setText("#accuracy", accuracy == null ? "--" : `${accuracy}%${excluded ? ` (${excluded} excluded)` : ""}`);
+
+  setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
+  setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
+  setText(
+    "#bestFilterNote",
+    `${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Showing ${bestGames.length} of ${allOpenBest.length} open picks.`
+  );
+
+  renderDailySummary();
+  renderRefreshStatus();
+  renderDataHealth();
+  renderQualityAccuracy();
+  renderSafetyMonitor();
+  renderBestBoard(bestGames);
+  renderGames("#todayGames", state.todayGames || [], "No today games loaded yet. Tap Sync.");
+  renderGames("#tomorrowGames", state.tomorrowGames || [], "No tomorrow games loaded yet. Tap Sync.");
+  renderMatchups();
+  renderTeams();
+  renderAutoSources();
+  renderResults();
+  renderModelReport();
+  renderModel();
+}
+
+function renderDailySummary() {
+  const todayGames = state?.todayGames || [];
+  const todayPredictions = todayGames.filter(game => game.prediction);
+  const openToday = todayPredictions.filter(game => {
+    return !game.prediction.locked && !isFinalStatus(game.status);
+  });
+
+  const bestToday = openToday
+    .slice()
+    .sort((a, b) => calibratedConfidence(b, b.prediction) - calibratedConfidence(a, a.prediction))[0];
+
+  const fallbackBest = todayPredictions
+    .slice()
+    .sort((a, b) => calibratedConfidence(b, b.prediction) - calibratedConfidence(a, a.prediction))[0];
+
+  const bestGame = bestToday || fallbackBest;
+
+  const strongCount = openToday.filter(game => calibratedConfidence(game, game.prediction) >= 68).length;
+  const goodCount = openToday.filter(game => calibratedConfidence(game, game.prediction) >= 60).length;
+  const lockedCount = todayPredictions.filter(game => game.prediction.locked).length;
+  const pendingCount = todayPredictions.filter(game => !game.prediction.result).length;
+
+  const accuracy = state.accuracy?.accuracy;
+
+  setText(
+    "#summaryBestPick",
+    bestGame
+      ? `${bestGame.prediction.predictedWinnerName} ${calibratedConfidence(bestGame, bestGame.prediction)}%`
+      : "--"
+  );
+
+  setText("#summaryStrong", strongCount);
+  setText("#summaryGood", goodCount);
+  setText("#summaryLocked", lockedCount);
+  setText("#summaryPending", pendingCount);
+  setText("#summaryAccuracy", accuracy == null ? "--" : `${accuracy}%`);
+}
+
+function renderRefreshStatus() {
+  setText("#refreshLastSync", lastSyncAt ? formatClock(lastSyncAt) : "--");
+  setText("#refreshNextSync", nextAutoSyncAt ? formatClock(nextAutoSyncAt) : "--");
+  setText("#refreshFrontend", "15 min");
+  setText("#refreshBackend", "Hourly");
+  setText("#refreshStorage", state ? "Saved DB active" : "Checking");
+  setText("#refreshStatus", currentRefreshStatus || "Ready");
+}
+
+function renderDataHealth() {
+  const todayGames = state?.todayGames || [];
+  const tomorrowGames = state?.tomorrowGames || [];
+  const predictions = state?.predictions || [];
+  const logs = state?.logs || [];
+
+  const storedGames = todayGames.length + tomorrowGames.length;
+  const predictionCount = predictions.length;
+  const latestLog = logs[0];
+  const latestBackendSync = latestLog?.at ? formatClock(latestLog.at) : lastSyncAt ? formatClock(lastSyncAt) : "--";
+
+  const apiStatus = state ? "Connected" : "Checking";
+  const dbStatus = state?.model ? "Working" : state ? "Loaded" : "Checking";
+
+  setText("#healthApi", apiStatus);
+  setText("#healthDb", dbStatus);
+  setText("#healthGames", storedGames);
+  setText("#healthPredictions", predictionCount);
+  setText("#healthBackendSync", latestBackendSync);
+  setText("#healthStoragePath", "/var/data");
+}
+
+function renderSafetyMonitor() {
+  const cached = state || loadDashboardCache();
+  const recoveryStatus = failedSyncs === 0
+    ? "Ready"
+    : cached
+      ? "Using cached data"
+      : "Waiting for retry";
+
+  setText("#safeLastGood", lastGoodLoadAt ? formatClock(lastGoodLoadAt) : "--");
+  setText("#safeLastError", lastErrorMessage || "None");
+  setText("#safeCachedData", cached ? "Available" : "None");
+  setText("#safeFailedSyncs", failedSyncs);
+  setText("#safeRecoveryStatus", recoveryStatus);
+  setText("#safeNextRetry", nextRetryAt ? formatClock(nextRetryAt) : "--");
+}
+
+function qualityAccuracyText(bucket) {
+  if (!bucket.total) return "--";
+
+  const accuracy = Math.round((bucket.correct / bucket.total) * 100);
+
+  return `${accuracy}% (${bucket.correct}/${bucket.total})`;
+}
+
+function renderQualityAccuracy() {
+  const predictions = state?.predictions || [];
+
+  const buckets = {
+    elite: { correct: 0, total: 0 },
+    strong: { correct: 0, total: 0 },
+    good: { correct: 0, total: 0 },
+    lean: { correct: 0, total: 0 },
+    risky: { correct: 0, total: 0 }
+  };
+
+  let countedGames = 0;
+
+  predictions.forEach(pred => {
+    const result = pred.result;
+
+    if (!result) return;
+    if (result.counted === false) return;
+
+    const quality = pickQualityData(pred, pred);
+    const key = buckets[quality.key] ? quality.key : "risky";
+
+    buckets[key].total += 1;
+    countedGames += 1;
+
+    if (result.correct) {
+      buckets[key].correct += 1;
+    }
+  });
+
+  setText("#qualityEliteAccuracy", qualityAccuracyText(buckets.elite));
+  setText("#qualityStrongAccuracy", qualityAccuracyText(buckets.strong));
+  setText("#qualityGoodAccuracy", qualityAccuracyText(buckets.good));
+  setText("#qualityLeanAccuracy", qualityAccuracyText(buckets.lean));
+  setText("#qualityRiskyAccuracy", qualityAccuracyText(buckets.risky));
+  setText("#qualityCountedGames", countedGames);
+}
+
+function average(values) {
+  const usable = values
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value));
+
+  if (!usable.length) return null;
+
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
+}
+
+function qualityName(key) {
+  if (key === "elite") return "🏆 Elite";
+  if (key === "strong") return "🔥 Strong";
+  if (key === "good") return "✅ Good";
+  if (key === "lean") return "⚠️ Lean";
+  return "🧊 Risky";
+}
+
+function renderModelReport() {
+  const predictions = state?.predictions || [];
+
+  const graded = predictions.filter(pred => pred.result);
+  const excluded = graded.filter(pred => pred.result?.counted === false);
+  const counted = graded.filter(pred => pred.result?.counted !== false);
+  const correct = counted.filter(pred => pred.result?.correct);
+  const wrong = counted.filter(pred => !pred.result?.correct);
+
+  const avgCorrect = average(correct.map(pred => calibratedConfidence(pred, pred)));
+  const avgWrong = average(wrong.map(pred => calibratedConfidence(pred, pred)));
+
+  const buckets = {
+    elite: { correct: 0, total: 0 },
+    strong: { correct: 0, total: 0 },
+    good: { correct: 0, total: 0 },
+    lean: { correct: 0, total: 0 },
+    risky: { correct: 0, total: 0 }
+  };
+
+  counted.forEach(pred => {
+    const quality = pickQualityData(pred, pred);
+    const key = buckets[quality.key] ? quality.key : "risky";
+
+    buckets[key].total += 1;
+
+    if (pred.result?.correct) {
+      buckets[key].correct += 1;
+    }
+  });
+
+  let bestQuality = "--";
+  let bestRate = -1;
+
+  Object.entries(buckets).forEach(([key, bucket]) => {
+    if (!bucket.total) return;
+
+    const rate = bucket.correct / bucket.total;
+
+    if (rate > bestRate) {
+      bestRate = rate;
+      bestQuality = `${qualityName(key)} ${Math.round(rate * 100)}% (${bucket.correct}/${bucket.total})`;
+    }
+  });
+
+  let modelStatus = "Collecting Data";
+
+  if (counted.length >= 50) {
+    modelStatus = "Calibrating";
+  }
+
+  if (counted.length >= 100) {
+    modelStatus = "Stronger Sample";
+  }
+
+  if (counted.length >= 200) {
+    modelStatus = "Strong Sample";
+  }
+
+  setText("#reportGradedGames", graded.length);
+  setText("#reportCorrectPicks", correct.length);
+  setText("#reportWrongPicks", wrong.length);
+  setText("#reportExcludedGames", excluded.length);
+  setText("#reportAvgConfidenceCorrect", avgCorrect == null ? "--" : `${Math.round(avgCorrect)}%`);
+  setText("#reportAvgConfidenceWrong", avgWrong == null ? "--" : `${Math.round(avgWrong)}%`);
+  setText("#reportBestQuality", bestQuality);
+  setText("#reportModelStatus", modelStatus);
+}
+
+function pitcherText(pitcher) {
+  if (!pitcher) return "Starter: TBD";
+
+  const parts = [];
+
+  if (pitcher.name) parts.push(pitcher.name);
+  if (pitcher.era != null) parts.push(`ERA ${number(pitcher.era, 2)}`);
+  if (pitcher.whip != null) parts.push(`WHIP ${number(pitcher.whip, 2)}`);
+  if (pitcher.recentEra != null) parts.push(`Recent ERA ${number(pitcher.recentEra, 2)}`);
+
+  return parts.length ? parts.join(" • ") : "Starter: TBD";
+}
+
+function predictedScore(game, pred) {
+  if (!pred) return "--";
+  return `${pred.projectedAwayScore ?? "--"} - ${pred.projectedHomeScore ?? "--"}`;
+}
+
+function actualOrProjectedScore(game, side, pred) {
+  const actual = side === "away" ? game.awayScore : game.homeScore;
+  const projected = side === "away" ? pred?.projectedAwayScore : pred?.projectedHomeScore;
+
+  if (actual != null) return actual;
+  if (projected != null) return projected;
+
+  return "--";
+}
+
 function pickQualityCard(game, pred) {
   const quality = pickQualityData(game, pred);
 
   return `
     <div class="pickQuality ${escapeHtml(quality.className)}">
-      <span>Pick Quality</span>
+      <span>Calibrated Pick Quality</span>
       <strong>${escapeHtml(quality.label)}</strong>
       <small>${escapeHtml(quality.detail)}</small>
     </div>
@@ -1038,12 +1239,24 @@ function confidenceBreakdown(game, pred) {
   if (!pred) return "";
 
   const edges = getPredictionEdges(game, pred);
+  const rawConfidence = Number(pred.confidence || 0);
+  const calibrated = calibratedConfidence(game, pred);
 
   return `
     <details class="confidenceDetails">
       <summary>Confidence Breakdown</summary>
 
       <div class="confidenceBreakdown">
+        <div class="breakdownLine good">
+          <span>Raw Confidence</span>
+          <strong>${escapeHtml(rawConfidence)}%</strong>
+        </div>
+
+        <div class="breakdownLine good">
+          <span>Calibrated Confidence</span>
+          <strong>${escapeHtml(calibrated)}%</strong>
+        </div>
+
         ${edges.map(edge => breakdownLine(edge.label, edge.value, game, pred)).join("")}
       </div>
     </details>
@@ -1115,7 +1328,8 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
     const pickId = String(pred?.predictedWinnerTeamId || "");
     const awayPick = pickId === String(game.awayTeamId);
     const homePick = pickId === String(game.homeTeamId);
-    const confidence = Math.max(0, Math.min(100, Number(pred?.confidence || 0)));
+    const confidence = Math.max(0, Math.min(100, calibratedConfidence(game, pred)));
+    const rawConfidence = Number(pred?.confidence || 0);
     const reasons = pred?.reasons || ["Waiting for enough matchup data"];
     const isBestBoard = selector === "#bestPicks";
 
@@ -1170,19 +1384,22 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
 
             <div class="confidenceWrap">
               <div class="confidenceLine">
-                <span>Confidence</span>
+                <span>Calibrated Confidence</span>
                 <strong>${confidence || "--"}%</strong>
               </div>
               <div class="confidenceBar">
                 <div class="confidenceFill" style="width:${confidence}%;"></div>
               </div>
+              ${rawConfidence && rawConfidence !== confidence ? `
+                <small class="mutedSmall">Raw model confidence: ${escapeHtml(rawConfidence)}%</small>
+              ` : ""}
             </div>
 
             ${pickQualityCard(game, pred)}
             ${strengthSummary(game, pred)}
 
             <div class="edgeList">
-              ${strengthBadge(pred)}
+              ${strengthBadge(pred, game)}
               ${lockBadge(pred)}
               ${reasons.slice(0, 7).map(reason => `
                 <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
@@ -1219,11 +1436,11 @@ function renderMatchups() {
         <p>
           Auto pick:
           <strong class="goldText">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</strong>
-          ${pred ? `with ${escapeHtml(pred.confidence)}% confidence.` : ""}
+          ${pred ? `with ${escapeHtml(calibratedConfidence(game, pred))}% calibrated confidence.` : ""}
         </p>
 
         <div class="edgeList">
-          ${strengthBadge(pred)}
+          ${strengthBadge(pred, game)}
           ${lockBadge(pred)}
         </div>
 
@@ -1337,7 +1554,7 @@ function renderAutoSources() {
         </p>
 
         <div class="edgeList">
-          ${strengthBadge(pred)}
+          ${strengthBadge(pred, game)}
           ${lockBadge(pred)}
           ${reasons.length ? reasons.map(reason => `
             <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
@@ -1364,7 +1581,7 @@ function renderAutoSources() {
           Auto inputs used: schedule, team record, home/away split, scoring trends,
           run prevention, run differential, probable pitchers, starter recent form,
           recent team form, head-to-head history, rest days, bullpen fatigue estimate,
-          previous results, and stored model learning.
+          previous results, calibration, and stored model learning.
         </p>
       </article>
     `;
@@ -1389,6 +1606,7 @@ function renderResults() {
   container.innerHTML = predictions.map(pred => {
     const result = pred.result;
     const counted = result?.counted !== false;
+    const confidence = calibratedConfidence(pred, pred);
 
     const badge = result
       ? `<span class="resultBadge ${result.correct ? "correct" : "wrong"}">
@@ -1408,7 +1626,7 @@ function renderResults() {
         <p>
           Date: ${escapeHtml(prettyDate(pred.date))}
           • Pick: <strong class="goldText">${escapeHtml(pred.predictedWinnerName)}</strong>
-          • Confidence: <strong>${escapeHtml(pred.confidence)}%</strong>
+          • Calibrated Confidence: <strong>${escapeHtml(confidence)}%</strong>
         </p>
 
         <p>
@@ -1426,7 +1644,7 @@ function renderResults() {
         ` : ""}
 
         <div class="edgeList">
-          ${strengthBadge(pred)}
+          ${strengthBadge(pred, pred)}
           ${lockBadge(pred)}
           ${countedBadge}
         </div>
