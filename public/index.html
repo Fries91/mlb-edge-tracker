@@ -1,76 +1,71 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>MLB Edge Tracker</title>
-  <meta name="description" content="Automatic MLB matchup analytics dashboard with self-learning prediction tracking." />
-  <meta name="theme-color" content="#071018" />
+  <meta name="description" content="Automatic MLB prediction and analytics dashboard." />
+  <meta name="theme-color" content="#101827" />
+
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/styles.css" />
+
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="MLB Edge" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="/styles.css" />
 </head>
 
 <body>
-  <header class="appHeader">
-    <div class="brandBlock">
-      <div class="logoBall">
-        <img src="/icon.svg" alt="MLB Edge Tracker" />
-      </div>
-
-      <div>
-        <h1>MLB Edge Tracker</h1>
-        <p>Automatic matchup scanner + self-learning predictions</p>
-      </div>
-    </div>
-
-    <div class="headerActions">
-      <button id="installBtn" class="installButton hidden" type="button">
-        <span>Install</span>
-        <small>App</small>
-      </button>
-
-      <button id="syncBtn" class="syncButton" type="button">
-        <span>Sync</span>
-        <small>Update</small>
-      </button>
-    </div>
-  </header>
-
   <main class="appShell">
-    <section class="heroPanel">
+    <header class="appHeader">
+      <div class="brandBlock">
+        <div class="logoBall">
+          <img src="/icon.svg" alt="MLB Edge Tracker" />
+        </div>
+
+        <div>
+          <h1>MLB Edge Tracker</h1>
+          <p>Automatic MLB analytics board</p>
+        </div>
+      </div>
+
+      <div class="headerActions">
+        <button id="installBtn" class="installButton hidden" type="button">Install</button>
+        <button id="syncBtn" class="syncButton" type="button">Sync Update</button>
+      </div>
+    </header>
+
+    <section class="heroCard">
       <div>
         <h2>Automatic MLB Edge Board</h2>
         <p>
-          The app checks teams, pitchers, records, scoring trends, recent form,
-          head-to-head history, final results, and model learning automatically.
+          Pulls games, team form, pitchers, lineup data when available, park/weather signals,
+          and model learning automatically.
         </p>
       </div>
 
-      <div class="heroStatus">
-        <span id="statusDot"></span>
+      <div class="statusWrap">
+        <span id="statusDot" class="statusDot"></span>
         <strong id="statusText">Ready</strong>
       </div>
     </section>
 
     <section class="quickStats">
       <div class="statCard">
-        <span>Today Games</span>
-        <strong id="todayCount">0</strong>
+        <span>Today</span>
+        <strong id="todayCount">--</strong>
       </div>
 
       <div class="statCard">
         <span>Tomorrow</span>
-        <strong id="tomorrowCount">0</strong>
+        <strong id="tomorrowCount">--</strong>
       </div>
 
       <div class="statCard">
         <span>Predictions</span>
-        <strong id="predictionCount">0</strong>
+        <strong id="predictionCount">--</strong>
       </div>
 
       <div class="statCard">
@@ -85,264 +80,255 @@
 
       <div class="statCard">
         <span>Model Games</span>
-        <strong id="trainedGames">0</strong>
+        <strong id="trainedGames">--</strong>
       </div>
     </section>
 
-    <section class="panel dailySummary">
+    <section class="summaryCard">
       <div class="panelHeader">
         <div>
           <h2>Daily Summary</h2>
-          <p>Quick readout of today’s strongest automatic prediction board.</p>
+          <p>Top qualified picks and model status for today.</p>
         </div>
       </div>
 
-      <div class="factorGrid">
-        <div class="factor">
-          <span>Best Pick Today</span>
+      <div class="metricGrid">
+        <div class="metricCard">
+          <span>Best Today</span>
           <strong id="summaryBestPick">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Strong Edges</span>
-          <strong id="summaryStrong">0</strong>
+          <strong id="summaryStrong">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Good Edge+</span>
-          <strong id="summaryGood">0</strong>
+        <div class="metricCard">
+          <span>Good Edges</span>
+          <strong id="summaryGood">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Locked Picks</span>
-          <strong id="summaryLocked">0</strong>
+        <div class="metricCard">
+          <span>Locked</span>
+          <strong id="summaryLocked">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Pending Results</span>
-          <strong id="summaryPending">0</strong>
+        <div class="metricCard">
+          <span>Pending</span>
+          <strong id="summaryPending">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Accuracy</span>
           <strong id="summaryAccuracy">--</strong>
         </div>
       </div>
     </section>
 
-    <section class="panel autoRefreshStatus">
+    <section class="summaryCard">
       <div class="panelHeader">
         <div>
           <h2>Auto Refresh Status</h2>
-          <p>Shows when the app last synced, when the next refresh is coming, and whether saved storage is active.</p>
+          <p>Frontend checks every 15 minutes. Backend syncs hourly.</p>
         </div>
       </div>
 
-      <div class="factorGrid">
-        <div class="factor">
-          <span>Last Synced</span>
+      <div class="metricGrid">
+        <div class="metricCard">
+          <span>Last Sync</span>
           <strong id="refreshLastSync">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Next Auto Sync</span>
+        <div class="metricCard">
+          <span>Next Sync</span>
           <strong id="refreshNextSync">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Frontend Refresh</span>
-          <strong id="refreshFrontend">15 min</strong>
+        <div class="metricCard">
+          <span>Frontend</span>
+          <strong id="refreshFrontend">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Backend Sync</span>
-          <strong id="refreshBackend">Hourly</strong>
+        <div class="metricCard">
+          <span>Backend</span>
+          <strong id="refreshBackend">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Data Storage</span>
-          <strong id="refreshStorage">Checking</strong>
+        <div class="metricCard">
+          <span>Storage</span>
+          <strong id="refreshStorage">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Status</span>
-          <strong id="refreshStatus">Ready</strong>
+          <strong id="refreshStatus">--</strong>
         </div>
       </div>
     </section>
 
-    <section class="panel dataHealthStatus">
+    <section class="summaryCard">
       <div class="panelHeader">
         <div>
           <h2>Data Health Check</h2>
-          <p>Checks the MLB feed, saved database, stored games, predictions, and backend sync health.</p>
+          <p>Shows whether the automatic engine is loading correctly.</p>
         </div>
       </div>
 
-      <div class="factorGrid">
-        <div class="factor">
+      <div class="metricGrid">
+        <div class="metricCard">
           <span>MLB API</span>
-          <strong id="healthApi">Checking</strong>
+          <strong id="healthApi">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Saved Database</span>
-          <strong id="healthDb">Checking</strong>
+        <div class="metricCard">
+          <span>Database</span>
+          <strong id="healthDb">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Games Stored</span>
-          <strong id="healthGames">0</strong>
+        <div class="metricCard">
+          <span>Loaded Games</span>
+          <strong id="healthGames">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Predictions Stored</span>
-          <strong id="healthPredictions">0</strong>
+        <div class="metricCard">
+          <span>Predictions</span>
+          <strong id="healthPredictions">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Last Backend Sync</span>
+        <div class="metricCard">
+          <span>Backend Sync</span>
           <strong id="healthBackendSync">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Storage Path</span>
           <strong id="healthStoragePath">--</strong>
         </div>
       </div>
     </section>
 
-    <section class="panel dataHealthStatus qualityAccuracy">
+    <section class="summaryCard">
       <div class="panelHeader">
         <div>
           <h2>Accuracy by Pick Quality</h2>
-          <p>Tracks how each pick quality level performs after final results are graded.</p>
+          <p>Only qualified picks are counted. No Pick games are excluded.</p>
         </div>
       </div>
 
-      <div class="factorGrid">
-        <div class="factor">
-          <span>Elite Accuracy</span>
+      <div class="metricGrid">
+        <div class="metricCard">
+          <span>Elite</span>
           <strong id="qualityEliteAccuracy">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Strong Accuracy</span>
+        <div class="metricCard">
+          <span>Strong</span>
           <strong id="qualityStrongAccuracy">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Good Accuracy</span>
+        <div class="metricCard">
+          <span>Good</span>
           <strong id="qualityGoodAccuracy">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Lean Accuracy</span>
+        <div class="metricCard">
+          <span>Lean</span>
           <strong id="qualityLeanAccuracy">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Risky / Toss Up</span>
+        <div class="metricCard">
+          <span>Risky</span>
           <strong id="qualityRiskyAccuracy">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Counted Games</span>
-          <strong id="qualityCountedGames">0</strong>
+          <strong id="qualityCountedGames">--</strong>
         </div>
       </div>
     </section>
 
-    <section class="panel dataHealthStatus safetyMonitor">
+    <section class="summaryCard">
       <div class="panelHeader">
         <div>
           <h2>Sync Safety Monitor</h2>
-          <p>Keeps the dashboard usable if the MLB feed has a bad response, slow response, or temporary outage.</p>
+          <p>Uses cached data if the latest sync fails.</p>
         </div>
       </div>
 
-      <div class="factorGrid">
-        <div class="factor">
+      <div class="metricGrid">
+        <div class="metricCard">
           <span>Last Good Load</span>
           <strong id="safeLastGood">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Last Error</span>
-          <strong id="safeLastError">None</strong>
+          <strong id="safeLastError">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Cached Data</span>
-          <strong id="safeCachedData">Checking</strong>
+        <div class="metricCard">
+          <span>Cache</span>
+          <strong id="safeCachedData">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Failed Syncs</span>
-          <strong id="safeFailedSyncs">0</strong>
+          <strong id="safeFailedSyncs">--</strong>
         </div>
 
-        <div class="factor">
-          <span>Recovery Status</span>
-          <strong id="safeRecoveryStatus">Ready</strong>
+        <div class="metricCard">
+          <span>Recovery</span>
+          <strong id="safeRecoveryStatus">--</strong>
         </div>
 
-        <div class="factor">
+        <div class="metricCard">
           <span>Next Retry</span>
           <strong id="safeNextRetry">--</strong>
         </div>
       </div>
     </section>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="best">Best Board</button>
-      <button class="tab" data-tab="today">Today</button>
-      <button class="tab" data-tab="tomorrow">Tomorrow</button>
-      <button class="tab" data-tab="matchups">Matchups</button>
-      <button class="tab" data-tab="teams">Teams</button>
-      <button class="tab" data-tab="sources">Auto Sources</button>
-      <button class="tab" data-tab="results">Results</button>
-      <button class="tab" data-tab="model">Model</button>
+    <nav class="tabBar">
+      <button class="tab active" data-tab="best" type="button">Best Board</button>
+      <button class="tab" data-tab="today" type="button">Today</button>
+      <button class="tab" data-tab="tomorrow" type="button">Tomorrow</button>
+      <button class="tab" data-tab="matchups" type="button">Matchups</button>
+      <button class="tab" data-tab="teams" type="button">Teams</button>
+      <button class="tab" data-tab="sources" type="button">Auto Sources</button>
+      <button class="tab" data-tab="results" type="button">Results</button>
+      <button class="tab" data-tab="model" type="button">Model</button>
+      <button class="tab" data-tab="help" type="button">Help</button>
     </nav>
 
     <section class="panel tabPanel" id="panel-best">
       <div class="panelHeader">
         <div>
-          <h2>Best Picks Board</h2>
-          <p>
-            Highest-confidence automatic picks, sorted strongest first.
-            These update every sync as pitchers, results, and model data change.
-          </p>
+          <h2>Best Board</h2>
+          <p id="bestFilterNote">Qualified picks only.</p>
         </div>
       </div>
 
-      <div class="filterNote">Confidence Filter</div>
-      <div class="bestFilterBar" id="confidenceFilters">
-        <button class="filterBtn active" data-filter="all">All</button>
-        <button class="filterBtn" data-filter="strong">🔥 Strong Edge</button>
-        <button class="filterBtn" data-filter="good">✅ Good Edge+</button>
-        <button class="filterBtn" data-filter="lean">⚠️ Lean+</button>
+      <div id="confidenceFilters" class="filterRow">
+        <button class="filterBtn active" data-filter="all" type="button">All</button>
+        <button class="filterBtn" data-filter="strong" type="button">Strong 68%+</button>
+        <button class="filterBtn" data-filter="good" type="button">Good 60%+</button>
+        <button class="filterBtn" data-filter="lean" type="button">Lean 54%+</button>
       </div>
 
-      <div class="filterNote">Pick Quality Filter</div>
-      <div class="bestFilterBar" id="qualityFilters">
-        <button class="filterBtn active" data-quality="all">All Quality</button>
-        <button class="filterBtn" data-quality="elite">🏆 Elite Only</button>
-        <button class="filterBtn" data-quality="strong">🔥 Strong+</button>
-        <button class="filterBtn" data-quality="good">✅ Good+</button>
-        <button class="filterBtn" data-quality="lean">⚠️ Lean+</button>
+      <div id="qualityFilters" class="filterRow">
+        <button class="filterBtn active" data-quality="all" type="button">All Quality</button>
+        <button class="filterBtn" data-quality="elite" type="button">Elite</button>
+        <button class="filterBtn" data-quality="strong" type="button">Strong+</button>
+        <button class="filterBtn" data-quality="good" type="button">Good+</button>
+        <button class="filterBtn" data-quality="lean" type="button">Lean+</button>
       </div>
 
-      <div class="filterNote">Sort Best Board</div>
-      <div class="bestFilterBar" id="sortFilters">
-        <button class="filterBtn active" data-sort="confidence">Highest Confidence</button>
-        <button class="filterBtn" data-sort="quality">Best Quality</button>
-        <button class="filterBtn" data-sort="time">Game Time</button>
-        <button class="filterBtn" data-sort="edge">Strongest Edge Score</button>
-      </div>
-
-      <div class="filterNote" id="bestFilterNote">
-        Showing all open picks before game start.
+      <div id="sortFilters" class="filterRow">
+        <button class="filterBtn active" data-sort="confidence" type="button">Confidence</button>
+        <button class="filterBtn" data-sort="quality" type="button">Quality</button>
+        <button class="filterBtn" data-sort="edge" type="button">Edge</button>
+        <button class="filterBtn" data-sort="time" type="button">Time</button>
       </div>
 
       <div id="bestPicks" class="gameGrid"></div>
@@ -351,8 +337,8 @@
     <section class="panel tabPanel hidden" id="panel-today">
       <div class="panelHeader">
         <div>
-          <h2>Today’s Predictions</h2>
-          <p id="todayDateLabel">Auto-calculated picks for today.</p>
+          <h2>Today</h2>
+          <p id="todayDateLabel">Today games.</p>
         </div>
       </div>
 
@@ -362,8 +348,8 @@
     <section class="panel tabPanel hidden" id="panel-tomorrow">
       <div class="panelHeader">
         <div>
-          <h2>Tomorrow’s Early Board</h2>
-          <p id="tomorrowDateLabel">Early predictions update again after pitchers and results change.</p>
+          <h2>Tomorrow</h2>
+          <p id="tomorrowDateLabel">Tomorrow games.</p>
         </div>
       </div>
 
@@ -373,19 +359,19 @@
     <section class="panel tabPanel hidden" id="panel-matchups">
       <div class="panelHeader">
         <div>
-          <h2>Matchup Breakdown</h2>
-          <p>Every game gets a matchup card with automatic edge factors.</p>
+          <h2>Matchups</h2>
+          <p>Full factor breakdown for each game.</p>
         </div>
       </div>
 
-      <div id="matchupList" class="breakdownList"></div>
+      <div id="matchupList" class="stackList"></div>
     </section>
 
     <section class="panel tabPanel hidden" id="panel-teams">
       <div class="panelHeader">
         <div>
-          <h2>Team Progress Snapshot</h2>
-          <p>All teams ranked by current stored form.</p>
+          <h2>Teams</h2>
+          <p>Rolling 120-day team form.</p>
         </div>
       </div>
 
@@ -394,14 +380,14 @@
           <thead>
             <tr>
               <th>Team</th>
-              <th>W-L</th>
-              <th>Win%</th>
+              <th>Record</th>
+              <th>Win %</th>
               <th>Home</th>
               <th>Away</th>
               <th>R/G</th>
               <th>RA/G</th>
-              <th>Diff/G</th>
-              <th>Form</th>
+              <th>Diff</th>
+              <th>Recent</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -412,122 +398,201 @@
     <section class="panel tabPanel hidden" id="panel-sources">
       <div class="panelHeader">
         <div>
-          <h2>Automatic Source Engine</h2>
-          <p>No manual input. The app builds prediction edges from stored MLB data and calculated history.</p>
+          <h2>Auto Sources</h2>
+          <p>What the engine used to build the prediction.</p>
         </div>
       </div>
 
-      <div class="sourcePipeline">
-        <div>
-          <strong>1</strong>
-          <span>Official MLB Data</span>
-          <small>Schedule, teams, records, scores, probable pitchers</small>
-        </div>
-
-        <div>
-          <strong>2</strong>
-          <span>Team Form</span>
-          <small>Win %, home/away splits, runs/game, run prevention</small>
-        </div>
-
-        <div>
-          <strong>3</strong>
-          <span>Pitching Edge</span>
-          <small>Starter ERA, WHIP, strikeouts when available</small>
-        </div>
-
-        <div>
-          <strong>4</strong>
-          <span>H2H + History</span>
-          <small>Recent head-to-head and stored result history</small>
-        </div>
-
-        <div>
-          <strong>5</strong>
-          <span>Self Learning</span>
-          <small>Right/wrong outcomes adjust model weights</small>
-        </div>
-      </div>
-
-      <h3>Auto-generated edge factors</h3>
-      <div id="autoSourceList" class="autoSourceList"></div>
+      <div id="autoSourceList" class="stackList"></div>
     </section>
 
     <section class="panel tabPanel hidden" id="panel-results">
       <div class="panelHeader">
         <div>
-          <h2>Prediction Results</h2>
-          <p>Final games are marked right/wrong and used to improve the next predictions.</p>
+          <h2>Results</h2>
+          <p>Recent predictions, finals, and excluded No Pick games.</p>
         </div>
       </div>
 
-      <div id="resultsList" class="resultList"></div>
+      <div id="resultsList" class="stackList"></div>
     </section>
 
     <section class="panel tabPanel hidden" id="panel-model">
       <div class="panelHeader">
         <div>
-          <h2>Self-Learning Model</h2>
-          <p>The model starts with baseball logic, then adjusts after completed games.</p>
+          <h2>Model</h2>
+          <p>Learning report, optimizer rules, and current weights.</p>
+        </div>
+
+        <a class="exportLink" href="/api/export">Export DB</a>
+      </div>
+
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Model Report</h2>
+            <p>Shows how the qualified prediction engine is performing.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard">
+            <span>Graded Games</span>
+            <strong id="reportGradedGames">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Correct Picks</span>
+            <strong id="reportCorrectPicks">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Wrong Picks</span>
+            <strong id="reportWrongPicks">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Excluded</span>
+            <strong id="reportExcludedGames">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Avg Conf Correct</span>
+            <strong id="reportAvgConfidenceCorrect">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Avg Conf Wrong</span>
+            <strong id="reportAvgConfidenceWrong">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Best Quality</span>
+            <strong id="reportBestQuality">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Status</span>
+            <strong id="reportModelStatus">--</strong>
+          </div>
         </div>
       </div>
 
-      <h3>Model Report</h3>
-
-      <div class="factorGrid">
-        <div class="factor">
-          <span>Graded Games</span>
-          <strong id="reportGradedGames">0</strong>
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Backtest Optimizer</h2>
+            <p>The app tests old games and chooses the best No Pick rules.</p>
+          </div>
         </div>
 
-        <div class="factor">
-          <span>Correct Picks</span>
-          <strong id="reportCorrectPicks">0</strong>
-        </div>
+        <div class="metricGrid">
+          <div class="metricCard">
+            <span>Status</span>
+            <strong id="optimizerStatus">--</strong>
+          </div>
 
-        <div class="factor">
-          <span>Wrong Picks</span>
-          <strong id="reportWrongPicks">0</strong>
-        </div>
+          <div class="metricCard">
+            <span>Tested Games</span>
+            <strong id="optimizerTested">--</strong>
+          </div>
 
-        <div class="factor">
-          <span>Excluded Games</span>
-          <strong id="reportExcludedGames">0</strong>
-        </div>
+          <div class="metricCard">
+            <span>Qualified</span>
+            <strong id="optimizerQualified">--</strong>
+          </div>
 
-        <div class="factor">
-          <span>Avg Confidence Correct</span>
-          <strong id="reportAvgConfidenceCorrect">--</strong>
-        </div>
+          <div class="metricCard">
+            <span>Optimizer Accuracy</span>
+            <strong id="optimizerAccuracy">--</strong>
+          </div>
 
-        <div class="factor">
-          <span>Avg Confidence Wrong</span>
-          <strong id="reportAvgConfidenceWrong">--</strong>
-        </div>
+          <div class="metricCard">
+            <span>Coverage</span>
+            <strong id="optimizerCoverage">--</strong>
+          </div>
 
-        <div class="factor">
-          <span>Best Quality Group</span>
-          <strong id="reportBestQuality">--</strong>
-        </div>
+          <div class="metricCard">
+            <span>Min Confidence</span>
+            <strong id="optimizerConfidence">--</strong>
+          </div>
 
-        <div class="factor">
-          <span>Model Status</span>
-          <strong id="reportModelStatus">Learning</strong>
+          <div class="metricCard">
+            <span>Min Edge Score</span>
+            <strong id="optimizerEdge">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Min Support</span>
+            <strong id="optimizerSupport">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Max Against</span>
+            <strong id="optimizerAgainst">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Pitcher Required</span>
+            <strong id="optimizerPitcher">--</strong>
+          </div>
+
+          <div class="metricCard">
+            <span>Lineup Required</span>
+            <strong id="optimizerLineup">--</strong>
+          </div>
         </div>
       </div>
 
-      <h3>Model Weights</h3>
+      <div class="sectionTitle">
+        <h3>Model Weights</h3>
+        <p>Higher values mean the model is trusting that factor more.</p>
+      </div>
 
-      <div id="modelWeights" class="modelWeights"></div>
+      <div id="modelWeights" class="weightsGrid"></div>
 
-      <h3>Update Log</h3>
+      <div class="sectionTitle">
+        <h3>Update Logs</h3>
+        <p>Latest backend sync and learning events.</p>
+      </div>
+
       <div id="logList" class="logList"></div>
+    </section>
 
-      <a class="exportLink" href="/api/export" target="_blank">Export stored database JSON</a>
+    <section class="panel tabPanel hidden" id="panel-help">
+      <div class="panelHeader">
+        <div>
+          <h2>Help</h2>
+          <p>How to read the board.</p>
+        </div>
+      </div>
+
+      <div class="helpGrid">
+        <div class="helpCard">
+          <h3>Best Board</h3>
+          <p>Shows qualified picks only. Games marked No Pick are skipped because the edge was too weak or messy.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Confidence</h3>
+          <p>Raw confidence comes from the model. Calibrated confidence adjusts based on how similar picks performed.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Optimizer</h3>
+          <p>Tests old games and chooses the best rules for minimum confidence, support factors, and edge score.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Accuracy</h3>
+          <p>Only qualified picks count. No Pick, late-created, and historical training games are excluded.</p>
+        </div>
+      </div>
     </section>
   </main>
 
   <script src="/app.js"></script>
+
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
