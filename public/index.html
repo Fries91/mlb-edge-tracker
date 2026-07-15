@@ -442,7 +442,154 @@
       </div>
     </section>
 
-    <!-- Keep your existing Model and Help sections from Final Pack Part 1 below this point. -->
+    <section class="panel tabPanel hidden" id="panel-model">
+      <div class="panelHeader">
+        <div>
+          <h2>Model</h2>
+          <p>Learning report, optimizer rules, factor accuracy, factor trust, and current weights.</p>
+        </div>
+
+        <a class="exportLink" href="/api/export">Export DB</a>
+      </div>
+
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Model Report</h2>
+            <p>Shows how the qualified prediction engine is performing.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard"><span>Graded Games</span><strong id="reportGradedGames">--</strong></div>
+          <div class="metricCard"><span>Correct Picks</span><strong id="reportCorrectPicks">--</strong></div>
+          <div class="metricCard"><span>Wrong Picks</span><strong id="reportWrongPicks">--</strong></div>
+          <div class="metricCard"><span>Excluded</span><strong id="reportExcludedGames">--</strong></div>
+          <div class="metricCard"><span>Avg Conf Correct</span><strong id="reportAvgConfidenceCorrect">--</strong></div>
+          <div class="metricCard"><span>Avg Conf Wrong</span><strong id="reportAvgConfidenceWrong">--</strong></div>
+          <div class="metricCard"><span>Best Quality</span><strong id="reportBestQuality">--</strong></div>
+          <div class="metricCard"><span>Status</span><strong id="reportModelStatus">--</strong></div>
+        </div>
+      </div>
+
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Backtest Optimizer</h2>
+            <p>The app tests old games and chooses the best No Pick rules.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard"><span>Status</span><strong id="optimizerStatus">--</strong></div>
+          <div class="metricCard"><span>Tested Games</span><strong id="optimizerTested">--</strong></div>
+          <div class="metricCard"><span>Qualified</span><strong id="optimizerQualified">--</strong></div>
+          <div class="metricCard"><span>Optimizer Accuracy</span><strong id="optimizerAccuracy">--</strong></div>
+          <div class="metricCard"><span>Coverage</span><strong id="optimizerCoverage">--</strong></div>
+          <div class="metricCard"><span>Min Confidence</span><strong id="optimizerConfidence">--</strong></div>
+          <div class="metricCard"><span>Min Edge Score</span><strong id="optimizerEdge">--</strong></div>
+          <div class="metricCard"><span>Min Support</span><strong id="optimizerSupport">--</strong></div>
+          <div class="metricCard"><span>Max Against</span><strong id="optimizerAgainst">--</strong></div>
+          <div class="metricCard"><span>Pitcher Required</span><strong id="optimizerPitcher">--</strong></div>
+          <div class="metricCard"><span>Lineup Required</span><strong id="optimizerLineup">--</strong></div>
+        </div>
+      </div>
+
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Factor Accuracy Report</h2>
+            <p>Shows which signals are helping the model and which ones may be hurting it.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard"><span>Best Signal</span><strong id="factorBestSignal">--</strong></div>
+          <div class="metricCard"><span>Weakest Signal</span><strong id="factorWeakSignal">--</strong></div>
+          <div class="metricCard"><span>Tracked Factors</span><strong id="factorTracked">--</strong></div>
+          <div class="metricCard"><span>Strong Signals</span><strong id="factorStrongSignals">--</strong></div>
+          <div class="metricCard"><span>Weak Signals</span><strong id="factorWeakSignals">--</strong></div>
+          <div class="metricCard"><span>Total Supports</span><strong id="factorSample">--</strong></div>
+        </div>
+
+        <div id="factorAccuracyList" class="weightsGrid"></div>
+      </div>
+
+      <div class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Factor Trust Control</h2>
+            <p>Shows which signals the backend is trusting, reducing, boosting, or muting.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard"><span>Status</span><strong id="factorTrustStatus">--</strong></div>
+          <div class="metricCard"><span>Muted</span><strong id="factorTrustMuted">--</strong></div>
+          <div class="metricCard"><span>Reduced</span><strong id="factorTrustReduced">--</strong></div>
+          <div class="metricCard"><span>Boosted</span><strong id="factorTrustBoosted">--</strong></div>
+          <div class="metricCard"><span>Learning</span><strong id="factorTrustLearning">--</strong></div>
+          <div class="metricCard"><span>Updated</span><strong id="factorTrustUpdated">--</strong></div>
+        </div>
+
+        <div id="factorTrustList" class="weightsGrid"></div>
+      </div>
+
+      <div class="sectionTitle">
+        <h3>Model Weights</h3>
+        <p>Higher values mean the model is trusting that factor more.</p>
+      </div>
+
+      <div id="modelWeights" class="weightsGrid"></div>
+
+      <div class="sectionTitle">
+        <h3>Update Logs</h3>
+        <p>Latest backend sync and learning events.</p>
+      </div>
+
+      <div id="logList" class="logList"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-help">
+      <div class="panelHeader">
+        <div>
+          <h2>Help</h2>
+          <p>How to read the board.</p>
+        </div>
+      </div>
+
+      <div class="helpGrid">
+        <div class="helpCard">
+          <h3>Best Board</h3>
+          <p>Shows the strongest qualified predictions first. Use Best 3, Best 5, Best 8, or All Qualified to control volume.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Auto Hide Bad Tiers</h3>
+          <p>When enabled, cold and avoid confidence tiers are hidden from the Best Board automatically.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Final Pick Report Card</h3>
+          <p>Each qualified prediction receives a final grade based on confidence, support, tier health, and recent accuracy.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Model Health</h3>
+          <p>The top health grade summarizes whether the model is hot, stable, learning, or needs caution.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Backend Info</h3>
+          <p>This tab holds app health, sync status, rolling accuracy, tier tracking, and safety monitor info.</p>
+        </div>
+
+        <div class="helpCard">
+          <h3>Model Tab</h3>
+          <p>This tab holds deeper learning details like optimizer rules, factor accuracy, factor trust, weights, and logs.</p>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script src="/app.js?v=final-1"></script>
