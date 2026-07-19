@@ -39,9 +39,9 @@
 
     <section class="heroCard">
       <div>
-        <h2>Automatic MLB Edge Board</h2>
+        <h2>Baseball Analytics Board</h2>
         <p>
-          Clean baseball analytics, confidence grades, model health, and qualified predictions.
+          Review today’s strongest qualified predictions, confidence grades, matchup details, and model health.
         </p>
       </div>
 
@@ -51,132 +51,9 @@
       </div>
     </section>
 
-    <section class="quickStats">
-      <div class="statCard">
-        <span>Today</span>
-        <strong id="todayCount">--</strong>
-      </div>
-
-      <div class="statCard">
-        <span>Tomorrow</span>
-        <strong id="tomorrowCount">--</strong>
-      </div>
-
-      <div class="statCard">
-        <span>Predictions</span>
-        <strong id="predictionCount">--</strong>
-      </div>
-
-      <div class="statCard">
-        <span>Best Pick</span>
-        <strong id="topConfidence">--</strong>
-      </div>
-
-      <div class="statCard">
-        <span>Accuracy</span>
-        <strong id="accuracy">--</strong>
-      </div>
-
-      <div class="statCard">
-        <span>Model Games</span>
-        <strong id="trainedGames">--</strong>
-      </div>
-    </section>
-
-    <section class="summaryCard">
-      <div class="panelHeader">
-        <div>
-          <h2>Daily Model Health</h2>
-          <p>Main app grade based on recent accuracy, confidence tiers, factor trust, optimizer status, and pick volume.</p>
-        </div>
-      </div>
-
-      <div class="metricGrid">
-        <div class="metricCard">
-          <span>Health Grade</span>
-          <strong id="modelHealthGrade">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Health Status</span>
-          <strong id="modelHealthStatus">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Recent Accuracy</span>
-          <strong id="modelHealthRolling">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Tier Strength</span>
-          <strong id="modelHealthTier">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Factor Trust</span>
-          <strong id="modelHealthTrust">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Optimizer</span>
-          <strong id="modelHealthOptimizer">--</strong>
-        </div>
-      </div>
-    </section>
-
-    <section class="summaryCard">
-      <div class="panelHeader">
-        <div>
-          <h2>Daily Summary</h2>
-          <p>Top qualified picks and model status for today.</p>
-        </div>
-      </div>
-
-      <div class="metricGrid">
-        <div class="metricCard">
-          <span>Best Today</span>
-          <strong id="summaryBestPick">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Strong Edges</span>
-          <strong id="summaryStrong">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Good Edges</span>
-          <strong id="summaryGood">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Target Volume</span>
-          <strong id="summaryVolume">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Displayed Picks</span>
-          <strong id="summaryDisplayed">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Auto Hide</span>
-          <strong id="summaryAutoHide">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Locked</span>
-          <strong id="summaryLocked">--</strong>
-        </div>
-
-        <div class="metricCard">
-          <span>Accuracy</span>
-          <strong id="summaryAccuracy">--</strong>
-        </div>
-      </div>
-    </section>
-
     <nav class="tabBar">
       <button class="tab active" data-tab="best" type="button">Best Board</button>
+      <button class="tab" data-tab="overview" type="button">Overview</button>
       <button class="tab" data-tab="today" type="button">Today</button>
       <button class="tab" data-tab="tomorrow" type="button">Tomorrow</button>
       <button class="tab" data-tab="matchups" type="button">Matchups</button>
@@ -233,6 +110,85 @@
       </div>
 
       <div id="bestPicks" class="gameGrid"></div>
+    </section>
+
+    <section class="panel tabPanel hidden" id="panel-overview">
+      <div class="panelHeader">
+        <div>
+          <h2>Overview</h2>
+          <p>Quick summary, daily model health, and today’s board status.</p>
+        </div>
+      </div>
+
+      <section class="quickStats">
+        <div class="statCard">
+          <span>Today</span>
+          <strong id="todayCount">--</strong>
+        </div>
+
+        <div class="statCard">
+          <span>Tomorrow</span>
+          <strong id="tomorrowCount">--</strong>
+        </div>
+
+        <div class="statCard">
+          <span>Predictions</span>
+          <strong id="predictionCount">--</strong>
+        </div>
+
+        <div class="statCard">
+          <span>Best Pick</span>
+          <strong id="topConfidence">--</strong>
+        </div>
+
+        <div class="statCard">
+          <span>Accuracy</span>
+          <strong id="accuracy">--</strong>
+        </div>
+
+        <div class="statCard">
+          <span>Model Games</span>
+          <strong id="trainedGames">--</strong>
+        </div>
+      </section>
+
+      <section class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Daily Model Health</h2>
+            <p>Main app grade based on recent accuracy, confidence tiers, factor trust, optimizer status, and pick volume.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard"><span>Health Grade</span><strong id="modelHealthGrade">--</strong></div>
+          <div class="metricCard"><span>Health Status</span><strong id="modelHealthStatus">--</strong></div>
+          <div class="metricCard"><span>Recent Accuracy</span><strong id="modelHealthRolling">--</strong></div>
+          <div class="metricCard"><span>Tier Strength</span><strong id="modelHealthTier">--</strong></div>
+          <div class="metricCard"><span>Factor Trust</span><strong id="modelHealthTrust">--</strong></div>
+          <div class="metricCard"><span>Optimizer</span><strong id="modelHealthOptimizer">--</strong></div>
+        </div>
+      </section>
+
+      <section class="summaryCard innerSummary">
+        <div class="panelHeader">
+          <div>
+            <h2>Daily Summary</h2>
+            <p>Top qualified picks and model status for today.</p>
+          </div>
+        </div>
+
+        <div class="metricGrid">
+          <div class="metricCard"><span>Best Today</span><strong id="summaryBestPick">--</strong></div>
+          <div class="metricCard"><span>Strong Edges</span><strong id="summaryStrong">--</strong></div>
+          <div class="metricCard"><span>Good Edges</span><strong id="summaryGood">--</strong></div>
+          <div class="metricCard"><span>Target Volume</span><strong id="summaryVolume">--</strong></div>
+          <div class="metricCard"><span>Displayed Picks</span><strong id="summaryDisplayed">--</strong></div>
+          <div class="metricCard"><span>Auto Hide</span><strong id="summaryAutoHide">--</strong></div>
+          <div class="metricCard"><span>Locked</span><strong id="summaryLocked">--</strong></div>
+          <div class="metricCard"><span>Accuracy</span><strong id="summaryAccuracy">--</strong></div>
+        </div>
+      </section>
     </section>
 
     <section class="panel tabPanel hidden" id="panel-today">
@@ -566,6 +522,11 @@
         </div>
 
         <div class="helpCard">
+          <h3>Overview</h3>
+          <p>This tab holds the quick stats, daily model health, and daily summary so the main screen stays cleaner.</p>
+        </div>
+
+        <div class="helpCard">
           <h3>Auto Hide Bad Tiers</h3>
           <p>When enabled, cold and avoid confidence tiers are hidden from the Best Board automatically.</p>
         </div>
@@ -573,11 +534,6 @@
         <div class="helpCard">
           <h3>Final Pick Report Card</h3>
           <p>Each qualified prediction receives a final grade based on confidence, support, tier health, and recent accuracy.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Model Health</h3>
-          <p>The top health grade summarizes whether the model is hot, stable, learning, or needs caution.</p>
         </div>
 
         <div class="helpCard">
