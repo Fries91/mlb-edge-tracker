@@ -1,11 +1,13 @@
-const CACHE_NAME = "mlb-edge-tracker-final-v1";
+const CACHE_NAME = "mlb-edge-tracker-ux-v1";
+
 const APP_SHELL = [
   "/",
-  "/index.html?v=final-1",
-  "/styles.css?v=final-1",
-  "/app.js?v=final-1",
+  "/index.html",
+  "/styles.css?v=ux-1",
+  "/app.js?v=ux-1",
   "/icon.svg",
-  "/manifest.webmanifest?v=final-1"
+  "/manifest.webmanifest?v=ux-1",
+  "/privacy.html"
 ];
 
 self.addEventListener("install", event => {
@@ -59,8 +61,6 @@ self.addEventListener("fetch", event => {
 
   event.respondWith(
     caches.match(request).then(cached => {
-      if (cached) return cached;
-
       return fetch(request).then(response => {
         const copy = response.clone();
 
@@ -70,7 +70,7 @@ self.addEventListener("fetch", event => {
 
         return response;
       }).catch(() => {
-        return caches.match("/") || caches.match("/index.html?v=final-1");
+        return cached || caches.match("/") || caches.match("/index.html");
       });
     })
   );
