@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>MLB Edge Tracker v1.0 Final</title>
+  <title>MLB Edge Tracker</title>
   <meta name="description" content="Automatic MLB prediction and analytics dashboard." />
   <meta name="theme-color" content="#101827" />
 
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="manifest" href="/manifest.webmanifest?v=final-1" />
-  <link rel="stylesheet" href="/styles.css?v=final-1" />
+  <link rel="manifest" href="/manifest.webmanifest?v=ux-1" />
+  <link rel="stylesheet" href="/styles.css?v=ux-1" />
 
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -19,29 +19,30 @@
 
 <body>
   <main class="appShell">
-    <header class="appHeader">
+    <header class="appHeader compactHeader">
       <div class="brandBlock">
         <div class="logoBall">
           <img src="/icon.svg" alt="MLB Edge Tracker" />
         </div>
 
         <div>
-          <h1>MLB Edge Tracker</h1>
-          <p id="versionStamp">v1.0 Final • Automatic MLB analytics board</p>
+          <h1>MLB Edge</h1>
+          <p id="versionStamp">v1.0 Final • Clean View</p>
         </div>
       </div>
 
       <div class="headerActions">
+        <button id="viewModeBtn" class="installButton" type="button">Simple View</button>
         <button id="installBtn" class="installButton hidden" type="button">Install</button>
-        <button id="syncBtn" class="syncButton" type="button">Sync Update</button>
+        <button id="syncBtn" class="syncButton" type="button">Sync</button>
       </div>
     </header>
 
-    <section class="heroCard">
+    <section class="heroCard slimHero">
       <div>
-        <h2>Baseball Analytics Board</h2>
+        <h2>Today’s Best Board</h2>
         <p>
-          Review today’s strongest qualified predictions, confidence grades, matchup details, and model health.
+          Clean qualified MLB predictions, confidence grades, projected scores, and matchup details.
         </p>
       </div>
 
@@ -51,21 +52,6 @@
       </div>
     </section>
 
-    <nav class="tabBar">
-      <button class="tab active" data-tab="best" type="button">Best Board</button>
-      <button class="tab" data-tab="overview" type="button">Overview</button>
-      <button class="tab" data-tab="today" type="button">Today</button>
-      <button class="tab" data-tab="tomorrow" type="button">Tomorrow</button>
-      <button class="tab" data-tab="matchups" type="button">Matchups</button>
-      <button class="tab" data-tab="teams" type="button">Teams</button>
-      <button class="tab" data-tab="sources" type="button">Auto Sources</button>
-      <button class="tab" data-tab="results" type="button">Results</button>
-      <button class="tab" data-tab="backend" type="button">Backend Info</button>
-      <button class="tab" data-tab="model" type="button">Model</button>
-      <button class="tab" data-tab="help" type="button">Help</button>
-      <button class="tab" data-tab="about" type="button">About</button>
-    </nav>
-
     <section class="panel tabPanel" id="panel-best">
       <div class="panelHeader">
         <div>
@@ -74,328 +60,276 @@
         </div>
       </div>
 
-      <div id="volumeFilters" class="filterRow">
-        <button class="filterBtn" data-volume="3" type="button">Best 3</button>
-        <button class="filterBtn active" data-volume="5" type="button">Best 5</button>
-        <button class="filterBtn" data-volume="8" type="button">Best 8</button>
-        <button class="filterBtn" data-volume="all" type="button">All Qualified</button>
+      <div class="filterPocket">
+        <details>
+          <summary>Board Filters</summary>
+
+          <div id="volumeFilters" class="filterRow">
+            <button class="filterBtn" data-volume="3" type="button">Best 3</button>
+            <button class="filterBtn active" data-volume="5" type="button">Best 5</button>
+            <button class="filterBtn" data-volume="8" type="button">Best 8</button>
+            <button class="filterBtn" data-volume="all" type="button">All Qualified</button>
+          </div>
+
+          <div id="autoHideFilters" class="filterRow">
+            <button id="autoHideBadTiersBtn" class="filterBtn active" data-auto-hide="on" type="button">
+              Hide Cold / Avoid Tiers: On
+            </button>
+          </div>
+
+          <div id="confidenceFilters" class="filterRow">
+            <button class="filterBtn active" data-filter="all" type="button">All Confidence</button>
+            <button class="filterBtn" data-filter="strong" type="button">Strong 68%+</button>
+            <button class="filterBtn" data-filter="good" type="button">Good 60%+</button>
+            <button class="filterBtn" data-filter="lean" type="button">Lean 54%+</button>
+          </div>
+
+          <div id="qualityFilters" class="filterRow">
+            <button class="filterBtn active" data-quality="all" type="button">All Quality</button>
+            <button class="filterBtn" data-quality="elite" type="button">Elite</button>
+            <button class="filterBtn" data-quality="strong" type="button">Strong+</button>
+            <button class="filterBtn" data-quality="good" type="button">Good+</button>
+            <button class="filterBtn" data-quality="lean" type="button">Lean+</button>
+          </div>
+
+          <div id="sortFilters" class="filterRow">
+            <button class="filterBtn active" data-sort="confidence" type="button">Confidence</button>
+            <button class="filterBtn" data-sort="quality" type="button">Quality</button>
+            <button class="filterBtn" data-sort="edge" type="button">Edge</button>
+            <button class="filterBtn" data-sort="time" type="button">Time</button>
+          </div>
+        </details>
       </div>
 
-      <div id="autoHideFilters" class="filterRow">
-        <button id="autoHideBadTiersBtn" class="filterBtn active" data-auto-hide="on" type="button">
-          Hide Cold / Avoid Tiers: On
-        </button>
-      </div>
-
-      <div id="confidenceFilters" class="filterRow">
-        <button class="filterBtn active" data-filter="all" type="button">All Confidence</button>
-        <button class="filterBtn" data-filter="strong" type="button">Strong 68%+</button>
-        <button class="filterBtn" data-filter="good" type="button">Good 60%+</button>
-        <button class="filterBtn" data-filter="lean" type="button">Lean 54%+</button>
-      </div>
-
-      <div id="qualityFilters" class="filterRow">
-        <button class="filterBtn active" data-quality="all" type="button">All Quality</button>
-        <button class="filterBtn" data-quality="elite" type="button">Elite</button>
-        <button class="filterBtn" data-quality="strong" type="button">Strong+</button>
-        <button class="filterBtn" data-quality="good" type="button">Good+</button>
-        <button class="filterBtn" data-quality="lean" type="button">Lean+</button>
-      </div>
-
-      <div id="sortFilters" class="filterRow">
-        <button class="filterBtn active" data-sort="confidence" type="button">Confidence</button>
-        <button class="filterBtn" data-sort="quality" type="button">Quality</button>
-        <button class="filterBtn" data-sort="edge" type="button">Edge</button>
-        <button class="filterBtn" data-sort="time" type="button">Time</button>
-      </div>
-
-      <div id="bestPicks" class="gameGrid"></div>
+      <div id="bestPicks" class="gameGrid compactGameGrid"></div>
     </section>
 
-    <section class="panel tabPanel hidden" id="panel-overview">
+    <section class="panel tabPanel hidden" id="panel-games">
       <div class="panelHeader">
         <div>
-          <h2>Overview</h2>
-          <p>Quick summary, daily model health, and today’s board status.</p>
+          <h2>Games</h2>
+          <p>Today, tomorrow, and full matchup views.</p>
         </div>
       </div>
 
-      <section class="quickStats">
-        <div class="statCard">
-          <span>Today</span>
-          <strong id="todayCount">--</strong>
-        </div>
+      <div class="subTabBar" data-subtab-group="games">
+        <button class="subTab active" data-subtab="todayView" type="button">Today</button>
+        <button class="subTab" data-subtab="tomorrowView" type="button">Tomorrow</button>
+        <button class="subTab" data-subtab="matchupsView" type="button">Matchups</button>
+      </div>
 
-        <div class="statCard">
-          <span>Tomorrow</span>
-          <strong id="tomorrowCount">--</strong>
-        </div>
-
-        <div class="statCard">
-          <span>Predictions</span>
-          <strong id="predictionCount">--</strong>
-        </div>
-
-        <div class="statCard">
-          <span>Best Pick</span>
-          <strong id="topConfidence">--</strong>
-        </div>
-
-        <div class="statCard">
-          <span>Accuracy</span>
-          <strong id="accuracy">--</strong>
-        </div>
-
-        <div class="statCard">
-          <span>Model Games</span>
-          <strong id="trainedGames">--</strong>
-        </div>
-      </section>
-
-      <section class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Daily Model Health</h2>
-            <p>Main app grade based on recent accuracy, confidence tiers, factor trust, optimizer status, and pick volume.</p>
-          </div>
-        </div>
-
-        <div class="metricGrid">
-          <div class="metricCard"><span>Health Grade</span><strong id="modelHealthGrade">--</strong></div>
-          <div class="metricCard"><span>Health Status</span><strong id="modelHealthStatus">--</strong></div>
-          <div class="metricCard"><span>Recent Accuracy</span><strong id="modelHealthRolling">--</strong></div>
-          <div class="metricCard"><span>Tier Strength</span><strong id="modelHealthTier">--</strong></div>
-          <div class="metricCard"><span>Factor Trust</span><strong id="modelHealthTrust">--</strong></div>
-          <div class="metricCard"><span>Optimizer</span><strong id="modelHealthOptimizer">--</strong></div>
-        </div>
-      </section>
-
-      <section class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Daily Summary</h2>
-            <p>Top qualified picks and model status for today.</p>
-          </div>
-        </div>
-
-        <div class="metricGrid">
-          <div class="metricCard"><span>Best Today</span><strong id="summaryBestPick">--</strong></div>
-          <div class="metricCard"><span>Strong Edges</span><strong id="summaryStrong">--</strong></div>
-          <div class="metricCard"><span>Good Edges</span><strong id="summaryGood">--</strong></div>
-          <div class="metricCard"><span>Target Volume</span><strong id="summaryVolume">--</strong></div>
-          <div class="metricCard"><span>Displayed Picks</span><strong id="summaryDisplayed">--</strong></div>
-          <div class="metricCard"><span>Auto Hide</span><strong id="summaryAutoHide">--</strong></div>
-          <div class="metricCard"><span>Locked</span><strong id="summaryLocked">--</strong></div>
-          <div class="metricCard"><span>Accuracy</span><strong id="summaryAccuracy">--</strong></div>
-        </div>
-      </section>
-    </section>
-
-    <section class="panel tabPanel hidden" id="panel-today">
-      <div class="panelHeader">
-        <div>
-          <h2>Today</h2>
+      <div id="todayView" class="subPanel">
+        <div class="sectionTitle">
+          <h3>Today</h3>
           <p id="todayDateLabel">Today games.</p>
         </div>
+
+        <div id="todayGames" class="gameGrid compactGameGrid"></div>
       </div>
 
-      <div id="todayGames" class="gameGrid"></div>
-    </section>
-
-    <section class="panel tabPanel hidden" id="panel-tomorrow">
-      <div class="panelHeader">
-        <div>
-          <h2>Tomorrow</h2>
+      <div id="tomorrowView" class="subPanel hidden">
+        <div class="sectionTitle">
+          <h3>Tomorrow</h3>
           <p id="tomorrowDateLabel">Tomorrow games.</p>
         </div>
+
+        <div id="tomorrowGames" class="gameGrid compactGameGrid"></div>
       </div>
 
-      <div id="tomorrowGames" class="gameGrid"></div>
-    </section>
-
-    <section class="panel tabPanel hidden" id="panel-matchups">
-      <div class="panelHeader">
-        <div>
-          <h2>Matchups</h2>
+      <div id="matchupsView" class="subPanel hidden">
+        <div class="sectionTitle">
+          <h3>Matchups</h3>
           <p>Full factor breakdown for each game.</p>
         </div>
-      </div>
 
-      <div id="matchupList" class="stackList"></div>
+        <div id="matchupList" class="stackList"></div>
+      </div>
     </section>
 
-    <section class="panel tabPanel hidden" id="panel-teams">
+    <section class="panel tabPanel hidden" id="panel-stats">
       <div class="panelHeader">
         <div>
-          <h2>Teams</h2>
+          <h2>Stats</h2>
+          <p>Quick overview, daily summary, teams, results, and accuracy.</p>
+        </div>
+      </div>
+
+      <div class="subTabBar" data-subtab-group="stats">
+        <button class="subTab active" data-subtab="overviewView" type="button">Overview</button>
+        <button class="subTab" data-subtab="teamsView" type="button">Teams</button>
+        <button class="subTab" data-subtab="resultsView" type="button">Results</button>
+        <button class="subTab" data-subtab="accuracyView" type="button">Accuracy</button>
+      </div>
+
+      <div id="overviewView" class="subPanel">
+        <section class="quickStats cleanerStats">
+          <div class="statCard">
+            <span>Today</span>
+            <strong id="todayCount">--</strong>
+          </div>
+
+          <div class="statCard">
+            <span>Tomorrow</span>
+            <strong id="tomorrowCount">--</strong>
+          </div>
+
+          <div class="statCard">
+            <span>Predictions</span>
+            <strong id="predictionCount">--</strong>
+          </div>
+
+          <div class="statCard">
+            <span>Best Pick</span>
+            <strong id="topConfidence">--</strong>
+          </div>
+
+          <div class="statCard">
+            <span>Accuracy</span>
+            <strong id="accuracy">--</strong>
+          </div>
+
+          <div class="statCard">
+            <span>Model Games</span>
+            <strong id="trainedGames">--</strong>
+          </div>
+        </section>
+
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Daily Model Health</h2>
+              <p>Main app grade based on recent accuracy, confidence tiers, factor trust, optimizer status, and pick volume.</p>
+            </div>
+          </div>
+
+          <div class="metricGrid">
+            <div class="metricCard"><span>Health Grade</span><strong id="modelHealthGrade">--</strong></div>
+            <div class="metricCard"><span>Health Status</span><strong id="modelHealthStatus">--</strong></div>
+            <div class="metricCard"><span>Recent Accuracy</span><strong id="modelHealthRolling">--</strong></div>
+            <div class="metricCard"><span>Tier Strength</span><strong id="modelHealthTier">--</strong></div>
+            <div class="metricCard"><span>Factor Trust</span><strong id="modelHealthTrust">--</strong></div>
+            <div class="metricCard"><span>Optimizer</span><strong id="modelHealthOptimizer">--</strong></div>
+          </div>
+        </section>
+
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Daily Summary</h2>
+              <p>Top qualified picks and model status for today.</p>
+            </div>
+          </div>
+
+          <div class="metricGrid">
+            <div class="metricCard"><span>Best Today</span><strong id="summaryBestPick">--</strong></div>
+            <div class="metricCard"><span>Strong Edges</span><strong id="summaryStrong">--</strong></div>
+            <div class="metricCard"><span>Good Edges</span><strong id="summaryGood">--</strong></div>
+            <div class="metricCard"><span>Target Volume</span><strong id="summaryVolume">--</strong></div>
+            <div class="metricCard"><span>Displayed Picks</span><strong id="summaryDisplayed">--</strong></div>
+            <div class="metricCard"><span>Auto Hide</span><strong id="summaryAutoHide">--</strong></div>
+            <div class="metricCard"><span>Locked</span><strong id="summaryLocked">--</strong></div>
+            <div class="metricCard"><span>Accuracy</span><strong id="summaryAccuracy">--</strong></div>
+          </div>
+        </section>
+      </div>
+
+      <div id="teamsView" class="subPanel hidden">
+        <div class="sectionTitle">
+          <h3>Teams</h3>
           <p>Rolling 120-day team form.</p>
         </div>
-      </div>
 
-      <div class="tableWrap">
-        <table id="teamsTable">
-          <thead>
-            <tr>
-              <th>Team</th>
-              <th>Record</th>
-              <th>Win %</th>
-              <th>Home</th>
-              <th>Away</th>
-              <th>R/G</th>
-              <th>RA/G</th>
-              <th>Diff</th>
-              <th>Recent</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel tabPanel hidden" id="panel-sources">
-      <div class="panelHeader">
-        <div>
-          <h2>Auto Sources</h2>
-          <p>What the engine used to build the prediction.</p>
+        <div class="tableWrap">
+          <table id="teamsTable">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Record</th>
+                <th>Win %</th>
+                <th>Home</th>
+                <th>Away</th>
+                <th>R/G</th>
+                <th>RA/G</th>
+                <th>Diff</th>
+                <th>Recent</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
 
-      <div id="autoSourceList" class="stackList"></div>
-    </section>
-
-    <section class="panel tabPanel hidden" id="panel-results">
-      <div class="panelHeader">
-        <div>
-          <h2>Results</h2>
+      <div id="resultsView" class="subPanel hidden">
+        <div class="sectionTitle">
+          <h3>Results</h3>
           <p>Recent predictions, finals, and excluded No Pick games.</p>
         </div>
+
+        <div id="resultsList" class="stackList"></div>
       </div>
 
-      <div id="resultsList" class="stackList"></div>
-    </section>
-
-    <section class="panel tabPanel hidden" id="panel-backend">
-      <div class="panelHeader">
-        <div>
-          <h2>Backend Info</h2>
-          <p>Technical app health, sync status, rolling accuracy, and confidence tier tracking.</p>
-        </div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Auto Refresh Status</h2>
-            <p>Frontend checks every 15 minutes. Backend syncs hourly.</p>
+      <div id="accuracyView" class="subPanel hidden">
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Rolling Accuracy</h2>
+              <p>Recent qualified-pick accuracy. No Pick games are excluded.</p>
+            </div>
           </div>
-        </div>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>Last Sync</span><strong id="refreshLastSync">--</strong></div>
-          <div class="metricCard"><span>Next Sync</span><strong id="refreshNextSync">--</strong></div>
-          <div class="metricCard"><span>Frontend</span><strong id="refreshFrontend">--</strong></div>
-          <div class="metricCard"><span>Backend</span><strong id="refreshBackend">--</strong></div>
-          <div class="metricCard"><span>Storage</span><strong id="refreshStorage">--</strong></div>
-          <div class="metricCard"><span>Status</span><strong id="refreshStatus">--</strong></div>
-        </div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Data Health Check</h2>
-            <p>Shows whether the automatic engine is loading correctly.</p>
+          <div class="metricGrid">
+            <div class="metricCard"><span>Last 7 Days</span><strong id="rolling7Accuracy">--</strong></div>
+            <div class="metricCard"><span>7D Record</span><strong id="rolling7Record">--</strong></div>
+            <div class="metricCard"><span>Last 14 Days</span><strong id="rolling14Accuracy">--</strong></div>
+            <div class="metricCard"><span>14D Record</span><strong id="rolling14Record">--</strong></div>
+            <div class="metricCard"><span>Last 30 Days</span><strong id="rolling30Accuracy">--</strong></div>
+            <div class="metricCard"><span>30D Record</span><strong id="rolling30Record">--</strong></div>
+            <div class="metricCard"><span>Trend</span><strong id="rollingTrend">--</strong></div>
+            <div class="metricCard"><span>Updated</span><strong id="rollingUpdated">--</strong></div>
           </div>
-        </div>
+        </section>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>MLB API</span><strong id="healthApi">--</strong></div>
-          <div class="metricCard"><span>Database</span><strong id="healthDb">--</strong></div>
-          <div class="metricCard"><span>Loaded Games</span><strong id="healthGames">--</strong></div>
-          <div class="metricCard"><span>Predictions</span><strong id="healthPredictions">--</strong></div>
-          <div class="metricCard"><span>Backend Sync</span><strong id="healthBackendSync">--</strong></div>
-          <div class="metricCard"><span>Storage Path</span><strong id="healthStoragePath">--</strong></div>
-        </div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Rolling Accuracy</h2>
-            <p>Recent qualified-pick accuracy. No Pick games are excluded.</p>
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Accuracy by Pick Quality</h2>
+              <p>Only qualified picks are counted. No Pick games are excluded.</p>
+            </div>
           </div>
-        </div>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>Last 7 Days</span><strong id="rolling7Accuracy">--</strong></div>
-          <div class="metricCard"><span>7D Record</span><strong id="rolling7Record">--</strong></div>
-          <div class="metricCard"><span>Last 14 Days</span><strong id="rolling14Accuracy">--</strong></div>
-          <div class="metricCard"><span>14D Record</span><strong id="rolling14Record">--</strong></div>
-          <div class="metricCard"><span>Last 30 Days</span><strong id="rolling30Accuracy">--</strong></div>
-          <div class="metricCard"><span>30D Record</span><strong id="rolling30Record">--</strong></div>
-          <div class="metricCard"><span>Trend</span><strong id="rollingTrend">--</strong></div>
-          <div class="metricCard"><span>Updated</span><strong id="rollingUpdated">--</strong></div>
-        </div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Confidence Tier Backtest</h2>
-            <p>Checks which confidence ranges are actually performing best. Qualified picks only.</p>
+          <div class="metricGrid">
+            <div class="metricCard"><span>Elite</span><strong id="qualityEliteAccuracy">--</strong></div>
+            <div class="metricCard"><span>Strong</span><strong id="qualityStrongAccuracy">--</strong></div>
+            <div class="metricCard"><span>Good</span><strong id="qualityGoodAccuracy">--</strong></div>
+            <div class="metricCard"><span>Lean</span><strong id="qualityLeanAccuracy">--</strong></div>
+            <div class="metricCard"><span>Risky</span><strong id="qualityRiskyAccuracy">--</strong></div>
+            <div class="metricCard"><span>Counted Games</span><strong id="qualityCountedGames">--</strong></div>
           </div>
-        </div>
+        </section>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>Best Tier</span><strong id="tierBest">--</strong></div>
-          <div class="metricCard"><span>Weakest Tier</span><strong id="tierWeakest">--</strong></div>
-          <div class="metricCard"><span>70%+</span><strong id="tier70">--</strong></div>
-          <div class="metricCard"><span>70%+ Status</span><strong id="tier70Status">--</strong></div>
-          <div class="metricCard"><span>65–69%</span><strong id="tier65">--</strong></div>
-          <div class="metricCard"><span>65–69 Status</span><strong id="tier65Status">--</strong></div>
-          <div class="metricCard"><span>60–64%</span><strong id="tier60">--</strong></div>
-          <div class="metricCard"><span>60–64 Status</span><strong id="tier60Status">--</strong></div>
-          <div class="metricCard"><span>55–59%</span><strong id="tier55">--</strong></div>
-          <div class="metricCard"><span>55–59 Status</span><strong id="tier55Status">--</strong></div>
-          <div class="metricCard"><span>Below 55%</span><strong id="tierBelow55">--</strong></div>
-          <div class="metricCard"><span>Status</span><strong id="tierStatus">--</strong></div>
-        </div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Accuracy by Pick Quality</h2>
-            <p>Only qualified picks are counted. No Pick games are excluded.</p>
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Confidence Tier Backtest</h2>
+              <p>Checks which confidence ranges are actually performing best. Qualified picks only.</p>
+            </div>
           </div>
-        </div>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>Elite</span><strong id="qualityEliteAccuracy">--</strong></div>
-          <div class="metricCard"><span>Strong</span><strong id="qualityStrongAccuracy">--</strong></div>
-          <div class="metricCard"><span>Good</span><strong id="qualityGoodAccuracy">--</strong></div>
-          <div class="metricCard"><span>Lean</span><strong id="qualityLeanAccuracy">--</strong></div>
-          <div class="metricCard"><span>Risky</span><strong id="qualityRiskyAccuracy">--</strong></div>
-          <div class="metricCard"><span>Counted Games</span><strong id="qualityCountedGames">--</strong></div>
-        </div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Sync Safety Monitor</h2>
-            <p>Uses cached data if the latest sync fails.</p>
+          <div class="metricGrid">
+            <div class="metricCard"><span>Best Tier</span><strong id="tierBest">--</strong></div>
+            <div class="metricCard"><span>Weakest Tier</span><strong id="tierWeakest">--</strong></div>
+            <div class="metricCard"><span>70%+</span><strong id="tier70">--</strong></div>
+            <div class="metricCard"><span>70%+ Status</span><strong id="tier70Status">--</strong></div>
+            <div class="metricCard"><span>65–69%</span><strong id="tier65">--</strong></div>
+            <div class="metricCard"><span>65–69 Status</span><strong id="tier65Status">--</strong></div>
+            <div class="metricCard"><span>60–64%</span><strong id="tier60">--</strong></div>
+            <div class="metricCard"><span>60–64 Status</span><strong id="tier60Status">--</strong></div>
+            <div class="metricCard"><span>55–59%</span><strong id="tier55">--</strong></div>
+            <div class="metricCard"><span>55–59 Status</span><strong id="tier55Status">--</strong></div>
+            <div class="metricCard"><span>Below 55%</span><strong id="tierBelow55">--</strong></div>
+            <div class="metricCard"><span>Status</span><strong id="tierStatus">--</strong></div>
           </div>
-        </div>
-
-        <div class="metricGrid">
-          <div class="metricCard"><span>Last Good Load</span><strong id="safeLastGood">--</strong></div>
-          <div class="metricCard"><span>Last Error</span><strong id="safeLastError">--</strong></div>
-          <div class="metricCard"><span>Cache</span><strong id="safeCachedData">--</strong></div>
-          <div class="metricCard"><span>Failed Syncs</span><strong id="safeFailedSyncs">--</strong></div>
-          <div class="metricCard"><span>Recovery</span><strong id="safeRecoveryStatus">--</strong></div>
-          <div class="metricCard"><span>Next Retry</span><strong id="safeNextRetry">--</strong></div>
-        </div>
+        </section>
       </div>
     </section>
 
@@ -403,229 +337,308 @@
       <div class="panelHeader">
         <div>
           <h2>Model</h2>
-          <p>Learning report, optimizer rules, factor accuracy, factor trust, and current weights.</p>
+          <p>Advanced learning report, optimizer, factor trust, and model weights.</p>
         </div>
 
         <a class="exportLink" href="/api/export">Export DB</a>
       </div>
 
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Model Report</h2>
-            <p>Shows how the qualified prediction engine is performing.</p>
+      <div class="subTabBar" data-subtab-group="model">
+        <button class="subTab active" data-subtab="modelReportView" type="button">Report</button>
+        <button class="subTab" data-subtab="optimizerView" type="button">Optimizer</button>
+        <button class="subTab" data-subtab="factorsView" type="button">Factors</button>
+        <button class="subTab" data-subtab="weightsView" type="button">Weights</button>
+      </div>
+
+      <div id="modelReportView" class="subPanel">
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Model Report</h2>
+              <p>Shows how the qualified prediction engine is performing.</p>
+            </div>
           </div>
-        </div>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>Graded Games</span><strong id="reportGradedGames">--</strong></div>
-          <div class="metricCard"><span>Correct Picks</span><strong id="reportCorrectPicks">--</strong></div>
-          <div class="metricCard"><span>Wrong Picks</span><strong id="reportWrongPicks">--</strong></div>
-          <div class="metricCard"><span>Excluded</span><strong id="reportExcludedGames">--</strong></div>
-          <div class="metricCard"><span>Avg Conf Correct</span><strong id="reportAvgConfidenceCorrect">--</strong></div>
-          <div class="metricCard"><span>Avg Conf Wrong</span><strong id="reportAvgConfidenceWrong">--</strong></div>
-          <div class="metricCard"><span>Best Quality</span><strong id="reportBestQuality">--</strong></div>
-          <div class="metricCard"><span>Status</span><strong id="reportModelStatus">--</strong></div>
-        </div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Backtest Optimizer</h2>
-            <p>The app tests old games and chooses the best No Pick rules.</p>
+          <div class="metricGrid">
+            <div class="metricCard"><span>Graded Games</span><strong id="reportGradedGames">--</strong></div>
+            <div class="metricCard"><span>Correct Picks</span><strong id="reportCorrectPicks">--</strong></div>
+            <div class="metricCard"><span>Wrong Picks</span><strong id="reportWrongPicks">--</strong></div>
+            <div class="metricCard"><span>Excluded</span><strong id="reportExcludedGames">--</strong></div>
+            <div class="metricCard"><span>Avg Conf Correct</span><strong id="reportAvgConfidenceCorrect">--</strong></div>
+            <div class="metricCard"><span>Avg Conf Wrong</span><strong id="reportAvgConfidenceWrong">--</strong></div>
+            <div class="metricCard"><span>Best Quality</span><strong id="reportBestQuality">--</strong></div>
+            <div class="metricCard"><span>Status</span><strong id="reportModelStatus">--</strong></div>
           </div>
-        </div>
-
-        <div class="metricGrid">
-          <div class="metricCard"><span>Status</span><strong id="optimizerStatus">--</strong></div>
-          <div class="metricCard"><span>Tested Games</span><strong id="optimizerTested">--</strong></div>
-          <div class="metricCard"><span>Qualified</span><strong id="optimizerQualified">--</strong></div>
-          <div class="metricCard"><span>Optimizer Accuracy</span><strong id="optimizerAccuracy">--</strong></div>
-          <div class="metricCard"><span>Coverage</span><strong id="optimizerCoverage">--</strong></div>
-          <div class="metricCard"><span>Min Confidence</span><strong id="optimizerConfidence">--</strong></div>
-          <div class="metricCard"><span>Min Edge Score</span><strong id="optimizerEdge">--</strong></div>
-          <div class="metricCard"><span>Min Support</span><strong id="optimizerSupport">--</strong></div>
-          <div class="metricCard"><span>Max Against</span><strong id="optimizerAgainst">--</strong></div>
-          <div class="metricCard"><span>Pitcher Required</span><strong id="optimizerPitcher">--</strong></div>
-          <div class="metricCard"><span>Lineup Required</span><strong id="optimizerLineup">--</strong></div>
-        </div>
+        </section>
       </div>
 
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Factor Accuracy Report</h2>
-            <p>Shows which signals are helping the model and which ones may be hurting it.</p>
+      <div id="optimizerView" class="subPanel hidden">
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Backtest Optimizer</h2>
+              <p>The app tests old games and chooses the best No Pick rules.</p>
+            </div>
           </div>
-        </div>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>Best Signal</span><strong id="factorBestSignal">--</strong></div>
-          <div class="metricCard"><span>Weakest Signal</span><strong id="factorWeakSignal">--</strong></div>
-          <div class="metricCard"><span>Tracked Factors</span><strong id="factorTracked">--</strong></div>
-          <div class="metricCard"><span>Strong Signals</span><strong id="factorStrongSignals">--</strong></div>
-          <div class="metricCard"><span>Weak Signals</span><strong id="factorWeakSignals">--</strong></div>
-          <div class="metricCard"><span>Total Supports</span><strong id="factorSample">--</strong></div>
-        </div>
-
-        <div id="factorAccuracyList" class="weightsGrid"></div>
-      </div>
-
-      <div class="summaryCard innerSummary">
-        <div class="panelHeader">
-          <div>
-            <h2>Factor Trust Control</h2>
-            <p>Shows which signals the backend is trusting, reducing, boosting, or muting.</p>
+          <div class="metricGrid">
+            <div class="metricCard"><span>Status</span><strong id="optimizerStatus">--</strong></div>
+            <div class="metricCard"><span>Tested Games</span><strong id="optimizerTested">--</strong></div>
+            <div class="metricCard"><span>Qualified</span><strong id="optimizerQualified">--</strong></div>
+            <div class="metricCard"><span>Optimizer Accuracy</span><strong id="optimizerAccuracy">--</strong></div>
+            <div class="metricCard"><span>Coverage</span><strong id="optimizerCoverage">--</strong></div>
+            <div class="metricCard"><span>Min Confidence</span><strong id="optimizerConfidence">--</strong></div>
+            <div class="metricCard"><span>Min Edge Score</span><strong id="optimizerEdge">--</strong></div>
+            <div class="metricCard"><span>Min Support</span><strong id="optimizerSupport">--</strong></div>
+            <div class="metricCard"><span>Max Against</span><strong id="optimizerAgainst">--</strong></div>
+            <div class="metricCard"><span>Pitcher Required</span><strong id="optimizerPitcher">--</strong></div>
+            <div class="metricCard"><span>Lineup Required</span><strong id="optimizerLineup">--</strong></div>
           </div>
+        </section>
+      </div>
+
+      <div id="factorsView" class="subPanel hidden">
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Factor Accuracy Report</h2>
+              <p>Shows which signals are helping the model and which ones may be hurting it.</p>
+            </div>
+          </div>
+
+          <div class="metricGrid">
+            <div class="metricCard"><span>Best Signal</span><strong id="factorBestSignal">--</strong></div>
+            <div class="metricCard"><span>Weakest Signal</span><strong id="factorWeakSignal">--</strong></div>
+            <div class="metricCard"><span>Tracked Factors</span><strong id="factorTracked">--</strong></div>
+            <div class="metricCard"><span>Strong Signals</span><strong id="factorStrongSignals">--</strong></div>
+            <div class="metricCard"><span>Weak Signals</span><strong id="factorWeakSignals">--</strong></div>
+            <div class="metricCard"><span>Total Supports</span><strong id="factorSample">--</strong></div>
+          </div>
+
+          <div id="factorAccuracyList" class="weightsGrid"></div>
+        </section>
+
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Factor Trust Control</h2>
+              <p>Shows which signals the backend is trusting, reducing, boosting, or muting.</p>
+            </div>
+          </div>
+
+          <div class="metricGrid">
+            <div class="metricCard"><span>Status</span><strong id="factorTrustStatus">--</strong></div>
+            <div class="metricCard"><span>Muted</span><strong id="factorTrustMuted">--</strong></div>
+            <div class="metricCard"><span>Reduced</span><strong id="factorTrustReduced">--</strong></div>
+            <div class="metricCard"><span>Boosted</span><strong id="factorTrustBoosted">--</strong></div>
+            <div class="metricCard"><span>Learning</span><strong id="factorTrustLearning">--</strong></div>
+            <div class="metricCard"><span>Updated</span><strong id="factorTrustUpdated">--</strong></div>
+          </div>
+
+          <div id="factorTrustList" class="weightsGrid"></div>
+        </section>
+      </div>
+
+      <div id="weightsView" class="subPanel hidden">
+        <div class="sectionTitle">
+          <h3>Model Weights</h3>
+          <p>Higher values mean the model is trusting that factor more.</p>
         </div>
 
-        <div class="metricGrid">
-          <div class="metricCard"><span>Status</span><strong id="factorTrustStatus">--</strong></div>
-          <div class="metricCard"><span>Muted</span><strong id="factorTrustMuted">--</strong></div>
-          <div class="metricCard"><span>Reduced</span><strong id="factorTrustReduced">--</strong></div>
-          <div class="metricCard"><span>Boosted</span><strong id="factorTrustBoosted">--</strong></div>
-          <div class="metricCard"><span>Learning</span><strong id="factorTrustLearning">--</strong></div>
-          <div class="metricCard"><span>Updated</span><strong id="factorTrustUpdated">--</strong></div>
+        <div id="modelWeights" class="weightsGrid"></div>
+
+        <div class="sectionTitle">
+          <h3>Update Logs</h3>
+          <p>Latest backend sync and learning events.</p>
         </div>
 
-        <div id="factorTrustList" class="weightsGrid"></div>
+        <div id="logList" class="logList"></div>
       </div>
-
-      <div class="sectionTitle">
-        <h3>Model Weights</h3>
-        <p>Higher values mean the model is trusting that factor more.</p>
-      </div>
-
-      <div id="modelWeights" class="weightsGrid"></div>
-
-      <div class="sectionTitle">
-        <h3>Update Logs</h3>
-        <p>Latest backend sync and learning events.</p>
-      </div>
-
-      <div id="logList" class="logList"></div>
     </section>
 
-    <section class="panel tabPanel hidden" id="panel-help">
+    <section class="panel tabPanel hidden" id="panel-more">
       <div class="panelHeader">
         <div>
-          <h2>Help</h2>
-          <p>How to read the board.</p>
+          <h2>More</h2>
+          <p>Backend info, help, sources, and about page.</p>
         </div>
       </div>
 
-      <div class="helpGrid">
-        <div class="helpCard">
-          <h3>Best Board</h3>
-          <p>Shows the strongest qualified predictions first. Use Best 3, Best 5, Best 8, or All Qualified to control volume.</p>
+      <div class="subTabBar" data-subtab-group="more">
+        <button class="subTab active" data-subtab="backendView" type="button">Backend</button>
+        <button class="subTab" data-subtab="sourcesView" type="button">Sources</button>
+        <button class="subTab" data-subtab="helpView" type="button">Help</button>
+        <button class="subTab" data-subtab="aboutView" type="button">About</button>
+      </div>
+
+      <div id="backendView" class="subPanel">
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Auto Refresh Status</h2>
+              <p>Frontend checks every 15 minutes. Backend syncs hourly.</p>
+            </div>
+          </div>
+
+          <div class="metricGrid">
+            <div class="metricCard"><span>Last Sync</span><strong id="refreshLastSync">--</strong></div>
+            <div class="metricCard"><span>Next Sync</span><strong id="refreshNextSync">--</strong></div>
+            <div class="metricCard"><span>Frontend</span><strong id="refreshFrontend">--</strong></div>
+            <div class="metricCard"><span>Backend</span><strong id="refreshBackend">--</strong></div>
+            <div class="metricCard"><span>Storage</span><strong id="refreshStorage">--</strong></div>
+            <div class="metricCard"><span>Status</span><strong id="refreshStatus">--</strong></div>
+          </div>
+        </section>
+
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Data Health Check</h2>
+              <p>Shows whether the automatic engine is loading correctly.</p>
+            </div>
+          </div>
+
+          <div class="metricGrid">
+            <div class="metricCard"><span>MLB API</span><strong id="healthApi">--</strong></div>
+            <div class="metricCard"><span>Database</span><strong id="healthDb">--</strong></div>
+            <div class="metricCard"><span>Loaded Games</span><strong id="healthGames">--</strong></div>
+            <div class="metricCard"><span>Predictions</span><strong id="healthPredictions">--</strong></div>
+            <div class="metricCard"><span>Backend Sync</span><strong id="healthBackendSync">--</strong></div>
+            <div class="metricCard"><span>Storage Path</span><strong id="healthStoragePath">--</strong></div>
+          </div>
+        </section>
+
+        <section class="summaryCard innerSummary">
+          <div class="panelHeader">
+            <div>
+              <h2>Sync Safety Monitor</h2>
+              <p>Uses cached data if the latest sync fails.</p>
+            </div>
+          </div>
+
+          <div class="metricGrid">
+            <div class="metricCard"><span>Last Good Load</span><strong id="safeLastGood">--</strong></div>
+            <div class="metricCard"><span>Last Error</span><strong id="safeLastError">--</strong></div>
+            <div class="metricCard"><span>Cache</span><strong id="safeCachedData">--</strong></div>
+            <div class="metricCard"><span>Failed Syncs</span><strong id="safeFailedSyncs">--</strong></div>
+            <div class="metricCard"><span>Recovery</span><strong id="safeRecoveryStatus">--</strong></div>
+            <div class="metricCard"><span>Next Retry</span><strong id="safeNextRetry">--</strong></div>
+          </div>
+        </section>
+      </div>
+
+      <div id="sourcesView" class="subPanel hidden">
+        <div class="sectionTitle">
+          <h3>Auto Sources</h3>
+          <p>What the engine used to build the prediction.</p>
         </div>
 
-        <div class="helpCard">
-          <h3>Overview</h3>
-          <p>This tab holds the quick stats, daily model health, and daily summary so the main screen stays cleaner.</p>
-        </div>
+        <div id="autoSourceList" class="stackList"></div>
+      </div>
 
-        <div class="helpCard">
-          <h3>Auto Hide Bad Tiers</h3>
-          <p>When enabled, cold and avoid confidence tiers are hidden from the Best Board automatically.</p>
-        </div>
+      <div id="helpView" class="subPanel hidden">
+        <div class="helpGrid">
+          <div class="helpCard">
+            <h3>Best Board</h3>
+            <p>Shows the strongest qualified predictions first. Use Best 3, Best 5, Best 8, or All Qualified to control volume.</p>
+          </div>
 
-        <div class="helpCard">
-          <h3>Final Pick Report Card</h3>
-          <p>Each qualified prediction receives a final grade based on confidence, support, tier health, and recent accuracy.</p>
-        </div>
+          <div class="helpCard">
+            <h3>Simple View</h3>
+            <p>Simple View keeps cards compact. Details stay hidden until opened.</p>
+          </div>
 
-        <div class="helpCard">
-          <h3>Backend Info</h3>
-          <p>This tab holds app health, sync status, rolling accuracy, tier tracking, and safety monitor info.</p>
-        </div>
+          <div class="helpCard">
+            <h3>Advanced View</h3>
+            <p>Advanced View shows deeper reasons, report cards, factor support, and confidence breakdowns.</p>
+          </div>
 
-        <div class="helpCard">
-          <h3>Model Tab</h3>
-          <p>This tab holds deeper learning details like optimizer rules, factor accuracy, factor trust, weights, and logs.</p>
+          <div class="helpCard">
+            <h3>Auto Hide Bad Tiers</h3>
+            <p>When enabled, cold and avoid confidence tiers are hidden from the Best Board automatically.</p>
+          </div>
+
+          <div class="helpCard">
+            <h3>Games</h3>
+            <p>The Games tab groups Today, Tomorrow, and Matchups into one cleaner area.</p>
+          </div>
+
+          <div class="helpCard">
+            <h3>Stats</h3>
+            <p>The Stats tab holds overview, teams, results, and accuracy so the home screen stays clean.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="aboutView" class="subPanel hidden">
+        <div class="helpGrid">
+          <div class="helpCard">
+            <h3>App Name</h3>
+            <p>MLB Edge Tracker</p>
+          </div>
+
+          <div class="helpCard">
+            <h3>Version</h3>
+            <p>v1.0 Final</p>
+          </div>
+
+          <div class="helpCard">
+            <h3>Purpose</h3>
+            <p>This app provides baseball analytics, matchup confidence, prediction grades, and model-health tracking.</p>
+          </div>
+
+          <div class="helpCard">
+            <h3>How It Works</h3>
+            <p>The app reviews schedule data, results, team form, pitcher signals, lineup signals when available, historical results, and model learning.</p>
+          </div>
+
+          <div class="helpCard">
+            <h3>Personal Data</h3>
+            <p>This app does not ask users to enter names, emails, phone numbers, addresses, or account passwords.</p>
+          </div>
+
+          <div class="helpCard">
+            <h3>Disclaimer</h3>
+            <p>Predictions are informational only. No result is guaranteed. Baseball outcomes can change because of injuries, lineup changes, weather, pitching changes, and game variance.</p>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="panel tabPanel hidden" id="panel-about">
-      <div class="panelHeader">
-        <div>
-          <h2>About MLB Edge Tracker</h2>
-          <p>Simple app information, privacy notes, and usage disclaimer.</p>
-        </div>
-      </div>
+    <nav class="bottomNav">
+      <button class="tab bottomTab active" data-tab="best" type="button">
+        <span>★</span>
+        Best
+      </button>
 
-      <div class="helpGrid">
-        <div class="helpCard">
-          <h3>App Name</h3>
-          <p>MLB Edge Tracker</p>
-        </div>
+      <button class="tab bottomTab" data-tab="games" type="button">
+        <span>⚾</span>
+        Games
+      </button>
 
-        <div class="helpCard">
-          <h3>Version</h3>
-          <p>v1.0 Final</p>
-        </div>
+      <button class="tab bottomTab" data-tab="stats" type="button">
+        <span>📊</span>
+        Stats
+      </button>
 
-        <div class="helpCard">
-          <h3>Purpose</h3>
-          <p>This app provides baseball analytics, matchup confidence, prediction grades, and model-health tracking.</p>
-        </div>
+      <button class="tab bottomTab" data-tab="model" type="button">
+        <span>🧠</span>
+        Model
+      </button>
 
-        <div class="helpCard">
-          <h3>How It Works</h3>
-          <p>The app reviews schedule data, results, team form, pitcher signals, lineup signals when available, historical results, and model learning.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Data Used</h3>
-          <p>MLB schedule, game results, team stats, pitcher stats, recent form, matchup factors, and generated prediction history.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Stored Data</h3>
-          <p>The app stores prediction history, model-learning data, optimizer rules, and sync logs on the app backend.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>User Accounts</h3>
-          <p>No user accounts are required inside this app.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Payments</h3>
-          <p>No payments, purchases, or subscriptions are handled inside this app.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Personal Data</h3>
-          <p>This app does not ask users to enter names, emails, phone numbers, addresses, or account passwords.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Disclaimer</h3>
-          <p>Predictions are informational only. No result is guaranteed. Baseball outcomes can change because of injuries, lineup changes, weather, pitching changes, and game variance.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Privacy Policy</h3>
-          <p>Add your public privacy policy link before submitting to Google Play.</p>
-        </div>
-
-        <div class="helpCard">
-          <h3>Support</h3>
-          <p>Add your support contact or support page before submitting to Google Play.</p>
-        </div>
-      </div>
-    </section>
+      <button class="tab bottomTab" data-tab="more" type="button">
+        <span>☰</span>
+        More
+      </button>
+    </nav>
   </main>
 
-  <script src="/app.js?v=final-1"></script>
+  <script src="/app.js?v=ux-1"></script>
 
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js?v=final-1").catch(() => {});
+        navigator.serviceWorker.register("/sw.js?v=ux-1").catch(() => {});
       });
     }
   </script>
