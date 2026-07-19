@@ -34,6 +34,7 @@ body {
     radial-gradient(circle at 15% 0%, rgba(97, 165, 255, 0.18), transparent 34%),
     radial-gradient(circle at 90% 8%, rgba(255, 209, 102, 0.12), transparent 30%),
     var(--bg);
+  padding-bottom: 92px;
 }
 
 button,
@@ -50,28 +51,39 @@ button {
 .appShell {
   width: min(1380px, 100%);
   margin: 0 auto;
-  padding: 18px;
+  padding: 14px;
 }
 
 .appHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.compactHeader {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  background: rgba(7, 17, 31, 0.86);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 10px;
 }
 
 .brandBlock {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .logoBall {
-  width: 54px;
-  height: 54px;
-  border-radius: 18px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   background: linear-gradient(145deg, rgba(255, 209, 102, 0.22), rgba(97, 165, 255, 0.16));
@@ -81,8 +93,8 @@ button {
 }
 
 .logoBall img {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: block;
 }
 
@@ -94,12 +106,12 @@ p {
 }
 
 h1 {
-  font-size: clamp(1.45rem, 5vw, 2.2rem);
+  font-size: clamp(1.25rem, 5vw, 1.85rem);
   line-height: 1.05;
 }
 
 h2 {
-  font-size: clamp(1.1rem, 3.5vw, 1.45rem);
+  font-size: clamp(1.05rem, 3.5vw, 1.35rem);
 }
 
 h3 {
@@ -114,7 +126,7 @@ p {
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -122,31 +134,33 @@ p {
 .syncButton,
 .installButton,
 .exportLink,
-.filterBtn {
+.filterBtn,
+.subTab {
   border: 1px solid var(--border2);
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  padding: 10px 15px;
+  padding: 9px 12px;
   text-decoration: none;
   transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  font-weight: 800;
 }
 
 .syncButton {
   background: linear-gradient(135deg, #2e7bff, #1cd096);
   border-color: transparent;
-  font-weight: 800;
 }
 
 .installButton {
-  background: rgba(255, 209, 102, 0.16);
+  background: rgba(255, 209, 102, 0.13);
   color: var(--gold);
 }
 
 .syncButton:hover,
 .installButton:hover,
 .exportLink:hover,
-.filterBtn:hover {
+.filterBtn:hover,
+.subTab:hover {
   transform: translateY(-1px);
   border-color: rgba(255, 255, 255, 0.28);
 }
@@ -160,7 +174,10 @@ p {
 .resultCard,
 .helpCard,
 .statCard,
-.metricCard {
+.metricCard,
+.weightCard,
+.logItem,
+.factor {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
@@ -168,33 +185,37 @@ p {
 }
 
 .heroCard {
-  border-radius: 24px;
-  padding: 22px;
-  margin-bottom: 16px;
+  border-radius: 22px;
+  padding: 16px;
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 14px;
+}
+
+.slimHero {
+  padding: 14px;
 }
 
 .heroCard h2 {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .statusWrap {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   background: rgba(0, 0, 0, 0.22);
-  padding: 10px 13px;
+  padding: 9px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
   white-space: nowrap;
 }
 
 .statusDot {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 999px;
   background: var(--green);
   box-shadow: 0 0 16px rgba(49, 208, 127, 0.75);
@@ -210,44 +231,15 @@ p {
   box-shadow: 0 0 16px rgba(255, 93, 115, 0.75);
 }
 
-.quickStats {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.statCard,
-.metricCard {
-  border-radius: var(--radius);
-  padding: 14px;
-  min-width: 0;
-}
-
-.statCard span,
-.metricCard span {
-  display: block;
-  color: var(--muted);
-  font-size: 0.82rem;
-  margin-bottom: 5px;
-}
-
-.statCard strong,
-.metricCard strong {
-  font-size: clamp(1rem, 3.6vw, 1.35rem);
-  line-height: 1.15;
-  word-break: break-word;
-}
-
-.summaryCard,
-.panel {
+.panel,
+.summaryCard {
   border-radius: 22px;
-  padding: 18px;
-  margin-bottom: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
 }
 
 .innerSummary {
-  margin-top: 14px;
+  margin-top: 12px;
   background: rgba(255, 255, 255, 0.035);
   box-shadow: none;
 }
@@ -257,54 +249,160 @@ p {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
+}
+
+.quickStats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cleanerStats {
+  margin-bottom: 0;
+}
+
+.statCard,
+.metricCard {
+  border-radius: var(--radius);
+  padding: 12px;
+  min-width: 0;
+}
+
+.statCard span,
+.metricCard span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 5px;
+}
+
+.statCard strong,
+.metricCard strong {
+  font-size: clamp(0.98rem, 3.6vw, 1.25rem);
+  line-height: 1.15;
+  word-break: break-word;
 }
 
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.tabBar {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 8px 0 14px;
-  margin-bottom: 4px;
-  scrollbar-width: thin;
-}
-
-.tab {
-  flex: 0 0 auto;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 10px 14px;
-  font-weight: 700;
-}
-
-.tab.active {
-  background: linear-gradient(135deg, rgba(97, 165, 255, 0.34), rgba(49, 208, 127, 0.2));
-  border-color: rgba(97, 165, 255, 0.45);
+  gap: 10px;
 }
 
 .hidden {
   display: none !important;
 }
 
+.bottomNav {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(720px, calc(100% - 18px));
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 8px;
+  border-radius: 22px;
+  border: 1px solid var(--border2);
+  background: rgba(7, 17, 31, 0.92);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48);
+}
+
+.bottomTab {
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 16px;
+  padding: 8px 5px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.bottomTab span {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.bottomTab.active {
+  color: var(--text);
+  background: linear-gradient(135deg, rgba(97, 165, 255, 0.28), rgba(49, 208, 127, 0.16));
+  border: 1px solid rgba(97, 165, 255, 0.35);
+}
+
+.subTabBar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 12px;
+  margin-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.subTab {
+  flex: 0 0 auto;
+  font-size: 0.88rem;
+  padding: 8px 12px;
+}
+
+.subTab.active {
+  background: rgba(97, 165, 255, 0.24);
+  border-color: rgba(97, 165, 255, 0.55);
+}
+
+.subPanel {
+  animation: softIn 0.16s ease;
+}
+
+@keyframes softIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.filterPocket {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.14);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.filterPocket summary {
+  padding: 11px 13px;
+  font-weight: 900;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.filterPocket details[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
 .filterRow {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 10px 0;
+  margin: 10px;
 }
 
 .filterBtn {
-  padding: 9px 12px;
-  font-size: 0.92rem;
-  font-weight: 750;
+  padding: 8px 11px;
+  font-size: 0.86rem;
 }
 
 .filterBtn.active {
@@ -315,122 +413,172 @@ p {
 .gameGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 14px;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.compactGameGrid {
+  gap: 10px;
 }
 
 .gameCard {
-  border-radius: 22px;
+  border-radius: 20px;
   overflow: hidden;
 }
 
 .gameInner {
-  padding: 16px;
+  padding: 13px;
 }
 
 .gameTop {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  margin-bottom: 14px;
+  margin-bottom: 11px;
 }
 
 .gameMeta {
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.86rem;
+  display: grid;
+  gap: 2px;
+}
+
+.gameMeta strong {
+  color: var(--text);
 }
 
 .statusPill,
 .resultBadge {
   border-radius: 999px;
-  padding: 7px 10px;
+  padding: 6px 9px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.08);
-  font-size: 0.82rem;
-  font-weight: 800;
+  font-size: 0.78rem;
+  font-weight: 850;
   white-space: nowrap;
 }
 
-.teamStack {
+.compactMatchLine {
   display: grid;
-  gap: 9px;
-  margin-bottom: 13px;
-}
-
-.teamRow {
-  display: flex;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
+  gap: 7px;
   align-items: center;
-  gap: 12px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.16);
-  border-radius: 16px;
-  padding: 12px;
+  text-align: center;
+  margin-bottom: 11px;
 }
 
-.teamRow.pick {
-  border-color: rgba(49, 208, 127, 0.65);
+.compactMatchLine > div {
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 10px 8px;
+  min-width: 0;
+}
+
+.compactMatchLine > div.pick {
+  border-color: rgba(49, 208, 127, 0.58);
   background: rgba(49, 208, 127, 0.1);
 }
 
-.teamName {
-  font-weight: 850;
-  margin-bottom: 4px;
+.compactMatchLine strong {
+  display: block;
+  font-size: 0.96rem;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.pitcher,
-.mutedSmall {
+.compactMatchLine small {
+  display: block;
+  margin-top: 3px;
   color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.scoreTag {
-  min-width: 38px;
-  text-align: center;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.09);
-  padding: 8px 9px;
   font-weight: 900;
 }
 
-.pickBox {
-  border-top: 1px solid var(--border);
-  padding-top: 13px;
-}
-
-.pickLabel {
+.compactMatchLine > span {
   color: var(--muted);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 850;
+  font-weight: 900;
 }
 
-.pickName {
-  color: var(--gold);
-  font-size: 1.35rem;
-  font-weight: 950;
-  margin: 3px 0 10px;
-}
-
-.projectedScore {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.compactPickBox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 10px;
+  align-items: center;
   border: 1px solid var(--border);
-  background: rgba(255, 209, 102, 0.08);
-  border-radius: 14px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
+  background: rgba(255, 209, 102, 0.07);
+  border-radius: 16px;
+  padding: 10px 11px;
+  margin-bottom: 10px;
 }
 
-.projectedScore span {
+.compactPickBox span {
+  display: block;
   color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 900;
+}
+
+.compactPickBox strong {
+  display: block;
+  color: var(--gold);
+  font-size: 1.12rem;
+  line-height: 1.15;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compactGrade {
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  font-weight: 950;
+  font-size: 1.15rem;
+}
+
+.miniMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.miniMetaGrid > div {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.13);
+  padding: 9px 8px;
+}
+
+.miniMetaGrid span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-bottom: 3px;
+}
+
+.miniMetaGrid strong {
+  display: block;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .confidenceWrap {
-  margin: 12px 0;
+  margin: 10px 0;
+}
+
+.compactConfidence {
+  margin-bottom: 8px;
 }
 
 .confidenceLine {
@@ -460,6 +608,71 @@ p {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #2e7bff, #1cd096, #ffd166);
+}
+
+.mutedSmall {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.cardDetails {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: 8px;
+  background: rgba(0, 0, 0, 0.11);
+}
+
+.cardDetails summary {
+  padding: 10px 12px;
+  font-weight: 900;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.detailsBody {
+  padding: 11px;
+}
+
+.teamStack {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.teamRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 16px;
+  padding: 11px;
+}
+
+.teamRow.pick {
+  border-color: rgba(49, 208, 127, 0.65);
+  background: rgba(49, 208, 127, 0.1);
+}
+
+.teamName {
+  font-weight: 850;
+  margin-bottom: 4px;
+}
+
+.pitcher {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.scoreTag {
+  min-width: 38px;
+  text-align: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 8px 9px;
+  font-weight: 900;
 }
 
 .pickQuality {
@@ -518,11 +731,11 @@ p {
 .strengthBox span {
   display: block;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
 }
 
 .strengthBox strong {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 
 .strengthMiniBar {
@@ -544,8 +757,8 @@ p {
   border-radius: 999px;
   border: 1px solid var(--border);
   padding: 6px 9px;
-  font-size: 0.78rem;
-  font-weight: 800;
+  font-size: 0.76rem;
+  font-weight: 850;
   background: rgba(255, 255, 255, 0.07);
 }
 
@@ -579,7 +792,7 @@ p {
 
 .pickReportCard {
   display: grid;
-  grid-template-columns: 108px 1fr;
+  grid-template-columns: 94px 1fr;
   gap: 10px;
   align-items: stretch;
   margin: 12px 0;
@@ -596,14 +809,14 @@ p {
 
 .reportGrade span {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 850;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .reportGrade strong {
-  font-size: 1.7rem;
+  font-size: 1.55rem;
   line-height: 1;
 }
 
@@ -658,9 +871,25 @@ p {
   color: var(--muted);
 }
 
+.simpleMode .advancedOnly {
+  display: none !important;
+}
+
+.advancedMode .advancedOnly {
+  display: block;
+}
+
+.advancedMode .strengthSummary.advancedOnly {
+  display: grid;
+}
+
+.advancedMode .pickReportCard.advancedOnly {
+  display: grid;
+}
+
 .stackList {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .breakdownCard,
@@ -668,7 +897,7 @@ p {
 .resultCard,
 .helpCard {
   border-radius: 20px;
-  padding: 16px;
+  padding: 15px;
 }
 
 .breakdownCard h3,
@@ -687,7 +916,6 @@ p {
 
 .factor {
   border-radius: 15px;
-  border: 1px solid var(--border);
   padding: 11px;
   background: rgba(0, 0, 0, 0.14);
 }
@@ -702,6 +930,8 @@ p {
 .tableWrap {
   width: 100%;
   overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid var(--border);
 }
 
 table {
@@ -719,7 +949,7 @@ td {
 
 th {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -731,10 +961,9 @@ th {
 }
 
 .weightCard {
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.13);
   border-radius: 16px;
   padding: 12px;
+  background: rgba(0, 0, 0, 0.13);
 }
 
 .weightName {
@@ -749,7 +978,7 @@ th {
 }
 
 .sectionTitle {
-  margin: 18px 0 10px;
+  margin: 12px 0 10px;
 }
 
 .logList {
@@ -758,11 +987,10 @@ th {
 }
 
 .logItem {
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.13);
   border-radius: 14px;
   padding: 11px;
   color: var(--muted);
+  background: rgba(0, 0, 0, 0.13);
 }
 
 .logItem strong {
@@ -818,7 +1046,7 @@ th {
 
 @media (max-width: 760px) {
   .appShell {
-    padding: 12px;
+    padding: 10px;
   }
 
   .appHeader {
@@ -826,21 +1054,30 @@ th {
     flex-direction: column;
   }
 
+  .compactHeader {
+    border-radius: 18px;
+  }
+
   .headerActions {
     width: 100%;
-    justify-content: stretch;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #viewModeBtn {
+    grid-column: 1 / -1;
   }
 
   .syncButton,
   .installButton {
-    flex: 1;
+    width: 100%;
     text-align: center;
   }
 
   .heroCard {
     flex-direction: column;
     align-items: flex-start;
-    padding: 16px;
+    padding: 13px;
   }
 
   .statusWrap {
@@ -851,12 +1088,12 @@ th {
   .quickStats,
   .metricGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
+    gap: 8px;
   }
 
   .summaryCard,
   .panel {
-    padding: 14px;
+    padding: 12px;
     border-radius: 18px;
   }
 
@@ -864,13 +1101,15 @@ th {
     flex-direction: column;
   }
 
-  .tabBar {
+  .subTabBar {
     position: sticky;
-    top: 0;
+    top: 92px;
     z-index: 20;
-    background: rgba(7, 17, 31, 0.88);
+    background: rgba(7, 17, 31, 0.86);
     backdrop-filter: blur(12px);
-    padding: 8px 0;
+    border-radius: 16px;
+    padding: 8px;
+    border: 1px solid var(--border);
   }
 
   .filterRow {
@@ -880,22 +1119,54 @@ th {
     scrollbar-width: thin;
   }
 
-  .filterBtn {
+  .filterBtn,
+  .subTab {
     flex: 0 0 auto;
-    padding: 9px 11px;
-    font-size: 0.86rem;
+    padding: 8px 10px;
+    font-size: 0.82rem;
   }
 
   .gameInner {
-    padding: 13px;
+    padding: 11px;
+  }
+
+  .compactMatchLine {
+    grid-template-columns: 1fr 18px 1fr;
+    gap: 6px;
+  }
+
+  .compactMatchLine > div {
+    padding: 9px 6px;
+  }
+
+  .compactMatchLine strong {
+    font-size: 0.88rem;
+  }
+
+  .compactPickBox {
+    grid-template-columns: minmax(0, 1fr) 48px;
+    padding: 9px;
+  }
+
+  .compactPickBox strong {
+    font-size: 1rem;
+  }
+
+  .miniMetaGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .miniMetaGrid > div {
+    padding: 8px 6px;
+  }
+
+  .miniMetaGrid strong {
+    font-size: 0.84rem;
   }
 
   .teamRow {
     padding: 10px;
-  }
-
-  .pickName {
-    font-size: 1.18rem;
   }
 
   .strengthSummary {
@@ -918,7 +1189,23 @@ th {
   }
 
   .edgeChip {
-    font-size: 0.74rem;
+    font-size: 0.72rem;
+  }
+
+  .bottomNav {
+    bottom: 8px;
+    width: calc(100% - 14px);
+    padding: 7px;
+    border-radius: 20px;
+  }
+
+  .bottomTab {
+    padding: 7px 4px;
+    font-size: 0.69rem;
+  }
+
+  .bottomTab span {
+    font-size: 0.98rem;
   }
 }
 
@@ -933,14 +1220,26 @@ th {
   }
 
   .logoBall {
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
+    width: 44px;
+    height: 44px;
+    border-radius: 15px;
   }
 
   .logoBall img {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
+  }
+
+  .compactMatchLine {
+    grid-template-columns: 1fr;
+  }
+
+  .compactMatchLine > span {
+    display: none;
+  }
+
+  .miniMetaGrid {
+    grid-template-columns: 1fr;
   }
 
   .gameTop {
@@ -950,11 +1249,5 @@ th {
   .statusPill {
     width: 100%;
     text-align: center;
-  }
-
-  .projectedScore,
-  .confidenceLine {
-    flex-direction: column;
-    gap: 4px;
   }
 }
