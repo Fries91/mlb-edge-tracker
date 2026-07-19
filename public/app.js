@@ -4,6 +4,7 @@ let qualityFilter = "all";
 let bestSort = "confidence";
 let volumeFilter = "5";
 let autoHideBadTiers = true;
+let simpleView = true;
 
 let lastSyncAt = null;
 let nextAutoSyncAt = null;
@@ -18,7 +19,7 @@ let qualityCalibrationCache = null;
 
 const APP_VERSION = "v1.0 Final";
 const FRONTEND_SYNC_MS = 15 * 60 * 1000;
-const CACHE_KEY = "mlb-edge-dashboard-cache-final-1";
+const CACHE_KEY = "mlb-edge-dashboard-cache-ux-1";
 
 const FACTOR_LABELS = {
   winPct: "Season Win %",
@@ -226,25 +227,25 @@ function bestFilterMinimum() {
 }
 
 function bestFilterLabel() {
-  if (bestFilter === "strong") return "Confidence: Strong 68%+.";
-  if (bestFilter === "good") return "Confidence: Good 60%+.";
-  if (bestFilter === "lean") return "Confidence: Lean 54%+.";
-  return "Confidence: All.";
+  if (bestFilter === "strong") return "Strong 68%+";
+  if (bestFilter === "good") return "Good 60%+";
+  if (bestFilter === "lean") return "Lean 54%+";
+  return "All Confidence";
 }
 
 function qualityFilterLabel() {
-  if (qualityFilter === "elite") return "Quality: Elite only.";
-  if (qualityFilter === "strong") return "Quality: Strong+.";
-  if (qualityFilter === "good") return "Quality: Good+.";
-  if (qualityFilter === "lean") return "Quality: Lean+.";
-  return "Quality: All.";
+  if (qualityFilter === "elite") return "Elite only";
+  if (qualityFilter === "strong") return "Strong+";
+  if (qualityFilter === "good") return "Good+";
+  if (qualityFilter === "lean") return "Lean+";
+  return "All Quality";
 }
 
 function sortFilterLabel() {
-  if (bestSort === "quality") return "Sort: Best quality.";
-  if (bestSort === "time") return "Sort: Game time.";
-  if (bestSort === "edge") return "Sort: Strongest edge score.";
-  return "Sort: Highest calibrated confidence.";
+  if (bestSort === "quality") return "Quality";
+  if (bestSort === "time") return "Time";
+  if (bestSort === "edge") return "Edge";
+  return "Confidence";
 }
 
 async function getJson(url) {
@@ -307,13 +308,61 @@ function setupTabs() {
       const tab = button.dataset.tab;
 
       $$(".tab").forEach(b => b.classList.remove("active"));
-      button.classList.add("active");
+      $$(`.tab[data-tab="${tab}"]`).forEach(b => b.classList.add("active"));
 
       $$(".tabPanel").forEach(panel => panel.classList.add("hidden"));
 
       const activePanel = $(`#panel-${tab}`);
       if (activePanel) activePanel.classList.remove("hidden");
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
+  });
+}
+
+function setupSubTabs() {
+  $$(".subTabBar").forEach(group => {
+    const buttons = Array.from(group.querySelectorAll(".subTab"));
+
+    buttons.forEach(button => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.subtab;
+
+        buttons.forEach(btn => btn.classList.remove("active"));
+        button.classList.add("active");
+
+        const panelParent = group.parentElement;
+        if (!panelParent) return;
+
+        panelParent.querySelectorAll(".subPanel").forEach(panel => {
+          panel.classList.add("hidden");
+        });
+
+        const targetPanel = panelParent.querySelector(`#${target}`);
+        if (targetPanel) targetPanel.classList.remove("hidden");
+      });
+    });
+  });
+}
+
+function setupViewMode() {
+  const btn = $("#viewModeBtn");
+  if (!btn) return;
+
+  document.body.classList.toggle("advancedMode", !simpleView);
+  document.body.classList.toggle("simpleMode", simpleView);
+
+  btn.textContent = simpleView ? "Simple View" : "Advanced View";
+
+  btn.addEventListener("click", () => {
+    simpleView = !simpleView;
+
+    document.body.classList.toggle("advancedMode", !simpleView);
+    document.body.classList.toggle("simpleMode", simpleView);
+
+    btn.textContent = simpleView ? "Simple View" : "Advanced View";
+
+    render();
   });
 }
 
@@ -595,7 +644,7 @@ function basePickQualityData(game, pred) {
   ) {
     return {
       key: "elite",
-      label: "🏆 Elite Qualified Pick",
+      label: "🏆 Elite Qualified",
       detail: "High confidence with season, recent form, and pitcher data lining up together.",
       className: "qualityElite"
     };
@@ -604,7 +653,7 @@ function basePickQualityData(game, pred) {
   if (confidence >= 68 && summary.score >= 5 && summary.against <= 4) {
     return {
       key: "strong",
-      label: "🔥 Strong Qualified Pick",
+      label: "🔥 Strong Qualified",
       detail: "Strong confidence with more advanced factors supporting than against.",
       className: "qualityStrong"
     };
@@ -613,7 +662,7 @@ function basePickQualityData(game, pred) {
   if (confidence >= 60 && summary.score >= 3) {
     return {
       key: "good",
-      label: "✅ Good Qualified Pick",
+      label: "✅ Good Qualified",
       detail: "Good calculated edge with several matchup factors supporting the pick.",
       className: "qualityGood"
     };
@@ -622,7 +671,7 @@ function basePickQualityData(game, pred) {
   if (confidence >= 54 && summary.score >= 0) {
     return {
       key: "lean",
-      label: "⚠️ Lean Qualified Pick",
+      label: "⚠️ Lean Qualified",
       detail: "Small edge. Watchable, but not a dominant matchup.",
       className: "qualityLean"
     };
@@ -751,9 +800,9 @@ function pickStrength(pred, game = pred) {
 
   const c = calibratedConfidence(game, pred);
 
-  if (c >= 68) return { label: "🔥 Strong Qualified", detail: "Highest calibrated automatic edge", className: "good" };
-  if (c >= 60) return { label: "✅ Good Qualified", detail: "Solid calibrated edge", className: "good" };
-  if (c >= 54) return { label: "⚠️ Lean Qualified", detail: "Small calculated edge", className: "warn" };
+  if (c >= 68) return { label: "🔥 Strong", detail: "Highest calibrated automatic edge", className: "good" };
+  if (c >= 60) return { label: "✅ Good", detail: "Solid calibrated edge", className: "good" };
+  if (c >= 54) return { label: "⚠️ Lean", detail: "Small calculated edge", className: "warn" };
 
   return {
     label: "🧊 Toss Up",
@@ -763,7 +812,7 @@ function pickStrength(pred, game = pred) {
 }
 
 function strengthBadge(pred, game = pred) {
-  if (!pred) return `<span class="edgeChip warn">Calculating strength</span>`;
+  if (!pred) return `<span class="edgeChip warn">Calculating</span>`;
 
   const strength = pickStrength(pred, game);
 
@@ -1062,7 +1111,7 @@ function render() {
     ? calibratedConfidence(allOpenBest[0], allOpenBest[0].prediction)
     : null;
 
-  setText("#versionStamp", `${APP_VERSION} • Automatic MLB analytics board`);
+  setText("#versionStamp", `${APP_VERSION} • ${simpleView ? "Simple View" : "Advanced View"}`);
   setText("#todayCount", state.todayGames?.length || 0);
   setText("#tomorrowCount", state.tomorrowGames?.length || 0);
   setText("#predictionCount", state.predictions?.length || 0);
@@ -1073,11 +1122,11 @@ function render() {
   const excluded = state.accuracy?.excluded || 0;
   setText("#accuracy", accuracy == null ? "--" : `${accuracy}%${excluded ? ` (${excluded} excluded)` : ""}`);
 
-  setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated picks.`);
+  setText("#todayDateLabel", `${prettyDate(state.date)} auto-calculated predictions.`);
   setText("#tomorrowDateLabel", `${prettyDate(state.tomorrow)} early board.`);
   setText(
     "#bestFilterNote",
-    `${volumeLabel()}. ${bestFilterLabel()} ${qualityFilterLabel()} ${sortFilterLabel()} Auto hide ${autoHideBadTiers ? "on" : "off"}. Showing ${bestGames.length} of ${beforeVolume.length} filtered qualified picks. ${allOpenBest.length} total open qualified.`
+    `${volumeLabel()} • ${bestFilterLabel()} • ${qualityFilterLabel()} • Sort ${sortFilterLabel()} • Auto hide ${autoHideBadTiers ? "on" : "off"}`
   );
 
   renderModelHealth(bestGames, beforeVolume);
@@ -1470,9 +1519,9 @@ function reportCardHtml(game, pred) {
   const report = reportGradeForGame(game, pred);
 
   return `
-    <div class="pickReportCard">
+    <div class="pickReportCard advancedOnly">
       <div class="reportGrade ${escapeHtml(report.className)}">
-        <span>Final Pick Grade</span>
+        <span>Final Grade</span>
         <strong>${escapeHtml(report.grade)}</strong>
       </div>
 
@@ -1529,7 +1578,7 @@ function renderModelReport() {
 
   let modelStatus = "Collecting Data";
 
-  if (counted.length >= 50) modelStatus = "Qualified Pick Calibration";
+  if (counted.length >= 50) modelStatus = "Qualified Calibration";
   if (counted.length >= 100) modelStatus = "Stronger Sample";
   if (counted.length >= 200) modelStatus = "Strong Sample";
 
@@ -1802,8 +1851,8 @@ function pickQualityCard(game, pred) {
   const quality = pickQualityData(game, pred);
 
   return `
-    <div class="pickQuality ${escapeHtml(quality.className)}">
-      <span>${pred?.noPick || pred?.qualified === false ? "Qualified Pick Filter" : "Calibrated Pick Quality"}</span>
+    <div class="pickQuality advancedOnly ${escapeHtml(quality.className)}">
+      <span>${pred?.noPick || pred?.qualified === false ? "Qualified Filter" : "Calibrated Quality"}</span>
       <strong>${escapeHtml(quality.label)}</strong>
       <small>${escapeHtml(quality.detail)}</small>
     </div>
@@ -1816,7 +1865,7 @@ function strengthSummary(game, pred) {
   const summary = strengthSummaryData(game, pred);
 
   return `
-    <div class="strengthSummary">
+    <div class="strengthSummary advancedOnly">
       <div class="strengthBox good">
         <span>Supports</span>
         <strong>${escapeHtml(summary.support)}</strong>
@@ -1884,17 +1933,17 @@ function confidenceBreakdown(game, pred) {
   const report = reportGradeForGame(game, pred);
 
   return `
-    <details class="confidenceDetails">
-      <summary>Confidence Breakdown</summary>
+    <details class="confidenceDetails advancedOnly">
+      <summary>Advanced Breakdown</summary>
 
       <div class="confidenceBreakdown">
         <div class="breakdownLine ${pred.noPick || pred.qualified === false ? "warn" : "good"}">
           <span>Qualified Status</span>
-          <strong>${escapeHtml(pred.noPick || pred.qualified === false ? (pred.noPickReason || "No Pick / Too Close") : "Qualified Pick")}</strong>
+          <strong>${escapeHtml(pred.noPick || pred.qualified === false ? (pred.noPickReason || "No Pick / Too Close") : "Qualified")}</strong>
         </div>
 
         <div class="breakdownLine good">
-          <span>Final Pick Grade</span>
+          <span>Final Grade</span>
           <strong>${escapeHtml(report.grade)} • ${escapeHtml(report.status)}</strong>
         </div>
 
@@ -1951,7 +2000,15 @@ function lockBadge(pred) {
     return `<span class="edgeChip warn">🔒 Locked</span>`;
   }
 
-  return `<span class="edgeChip good">Open until game starts</span>`;
+  return `<span class="edgeChip good">Open</span>`;
+}
+
+function compactReasons(reasons) {
+  if (!reasons || !reasons.length) return "";
+
+  return reasons.slice(0, simpleView ? 2 : 8).map(reason => `
+    <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
+  `).join("");
 }
 
 function renderBestBoard(games) {
@@ -2000,20 +2057,20 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
     let pillText = game.status || "Scheduled";
 
     if (isBestBoard) {
-      pillText = `#${index + 1} Top Qualified`;
+      pillText = `#${index + 1}`;
     } else if (pred?.noPick || pred?.qualified === false) {
-      pillText = "No Pick / Too Close";
+      pillText = "No Pick";
     } else if (pred?.locked) {
-      pillText = "🔒 Locked";
+      pillText = "Locked";
     }
 
     return `
-      <article class="gameCard">
+      <article class="gameCard compactCard">
         <div class="gameInner">
           <div class="gameTop">
             <div class="gameMeta">
-              <strong>${escapeHtml(shortTime(game.gameDate))}</strong><br>
-              ${escapeHtml(game.venue || "MLB")}
+              <strong>${escapeHtml(shortTime(game.gameDate))}</strong>
+              <span>${escapeHtml(game.venue || "MLB")}</span>
             </div>
 
             <div class="statusPill">
@@ -2021,62 +2078,94 @@ function renderGames(selector, games, emptyMessage = "No games loaded yet. Tap S
             </div>
           </div>
 
-          <div class="teamStack">
-            <div class="teamRow ${awayPick ? "pick" : ""}">
-              <div>
-                <div class="teamName">${escapeHtml(game.awayTeamName)}</div>
-                <span class="pitcher">${escapeHtml(pitcherText(game.awayPitcher))}</span>
-              </div>
-              <div class="scoreTag">${escapeHtml(actualOrProjectedScore(game, "away", pred))}</div>
+          <div class="compactMatchLine">
+            <div class="${awayPick ? "pick" : ""}">
+              <strong>${escapeHtml(game.awayTeamName)}</strong>
+              <small>${escapeHtml(actualOrProjectedScore(game, "away", pred))}</small>
             </div>
 
-            <div class="teamRow ${homePick ? "pick" : ""}">
-              <div>
-                <div class="teamName">${escapeHtml(game.homeTeamName)}</div>
-                <span class="pitcher">${escapeHtml(pitcherText(game.homePitcher))}</span>
-              </div>
-              <div class="scoreTag">${escapeHtml(actualOrProjectedScore(game, "home", pred))}</div>
+            <span>@</span>
+
+            <div class="${homePick ? "pick" : ""}">
+              <strong>${escapeHtml(game.homeTeamName)}</strong>
+              <small>${escapeHtml(actualOrProjectedScore(game, "home", pred))}</small>
             </div>
           </div>
 
-          <div class="pickBox">
-            <div class="pickLabel">${pred?.noPick || pred?.qualified === false ? "Qualified Filter" : "Top Qualified Pick"}</div>
-            <div class="pickName">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</div>
+          <div class="compactPickBox">
+            <div>
+              <span>${pred?.noPick || pred?.qualified === false ? "No Pick / Too Close" : "Prediction"}</span>
+              <strong>${escapeHtml(pred?.predictedWinnerName || "Calculating")}</strong>
+            </div>
 
-            <div class="projectedScore">
-              <span>Projected score</span>
+            <div class="compactGrade ${escapeHtml(report.className || "warn")}">
+              ${escapeHtml(report.grade)}
+            </div>
+          </div>
+
+          <div class="miniMetaGrid">
+            <div>
+              <span>Confidence</span>
+              <strong>${confidence || "--"}%</strong>
+            </div>
+
+            <div>
+              <span>Projected</span>
               <strong>${escapeHtml(predictedScore(game, pred))}</strong>
             </div>
 
-            <div class="confidenceWrap">
-              <div class="confidenceLine">
-                <span>Calibrated Confidence</span>
-                <strong>${confidence || "--"}%</strong>
-              </div>
-              <div class="confidenceBar">
-                <div class="confidenceFill" style="width:${confidence}%;"></div>
-              </div>
-              ${rawConfidence && rawConfidence !== confidence ? `
-                <small class="mutedSmall">Raw model confidence: ${escapeHtml(rawConfidence)}%</small>
-              ` : ""}
+            <div>
+              <span>Tier</span>
+              <strong>${escapeHtml(tier.status.replace(/[🔥✅⚠️🚫⏳]/g, "").trim() || "Learning")}</strong>
             </div>
-
-            ${reportCardHtml(game, pred)}
-            ${pickQualityCard(game, pred)}
-            ${strengthSummary(game, pred)}
-
-            <div class="edgeList">
-              ${strengthBadge(pred, game)}
-              ${lockBadge(pred)}
-              <span class="edgeChip ${escapeHtml(tier.statusClass || "warn")}">${escapeHtml(tier.status)}</span>
-              <span class="edgeChip ${escapeHtml(report.className || "warn")}">Grade ${escapeHtml(report.grade)}</span>
-              ${reasons.slice(0, 8).map(reason => `
-                <span class="edgeChip ${edgeClass(reason)}">${escapeHtml(reason)}</span>
-              `).join("")}
-            </div>
-
-            ${confidenceBreakdown(game, pred)}
           </div>
+
+          <div class="confidenceWrap compactConfidence">
+            <div class="confidenceBar">
+              <div class="confidenceFill" style="width:${confidence}%;"></div>
+            </div>
+            ${rawConfidence && rawConfidence !== confidence ? `
+              <small class="mutedSmall">Raw ${escapeHtml(rawConfidence)}%</small>
+            ` : ""}
+          </div>
+
+          <details class="cardDetails" ${simpleView ? "" : "open"}>
+            <summary>View Details</summary>
+
+            <div class="detailsBody">
+              <div class="teamStack">
+                <div class="teamRow ${awayPick ? "pick" : ""}">
+                  <div>
+                    <div class="teamName">${escapeHtml(game.awayTeamName)}</div>
+                    <span class="pitcher">${escapeHtml(pitcherText(game.awayPitcher))}</span>
+                  </div>
+                  <div class="scoreTag">${escapeHtml(actualOrProjectedScore(game, "away", pred))}</div>
+                </div>
+
+                <div class="teamRow ${homePick ? "pick" : ""}">
+                  <div>
+                    <div class="teamName">${escapeHtml(game.homeTeamName)}</div>
+                    <span class="pitcher">${escapeHtml(pitcherText(game.homePitcher))}</span>
+                  </div>
+                  <div class="scoreTag">${escapeHtml(actualOrProjectedScore(game, "home", pred))}</div>
+                </div>
+              </div>
+
+              ${reportCardHtml(game, pred)}
+              ${pickQualityCard(game, pred)}
+              ${strengthSummary(game, pred)}
+
+              <div class="edgeList">
+                ${strengthBadge(pred, game)}
+                ${lockBadge(pred)}
+                <span class="edgeChip ${escapeHtml(tier.statusClass || "warn")}">${escapeHtml(tier.status)}</span>
+                <span class="edgeChip ${escapeHtml(report.className || "warn")}">Grade ${escapeHtml(report.grade)}</span>
+                ${compactReasons(reasons)}
+              </div>
+
+              ${confidenceBreakdown(game, pred)}
+            </div>
+          </details>
         </div>
       </article>
     `;
@@ -2103,7 +2192,7 @@ function renderMatchups() {
       <article class="breakdownCard">
         <h3>${escapeHtml(game.awayTeamName)} @ ${escapeHtml(game.homeTeamName)}</h3>
         <p>
-          Auto result:
+          Prediction:
           <strong class="goldText">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</strong>
           ${pred ? `with ${escapeHtml(calibratedConfidence(game, pred))}% calibrated confidence.` : ""}
         </p>
@@ -2217,7 +2306,7 @@ function renderAutoSources() {
       <article class="autoCard">
         <h3>${escapeHtml(game.awayTeamName)} @ ${escapeHtml(game.homeTeamName)}</h3>
         <p>
-          Result:
+          Prediction:
           <strong class="goldText">${escapeHtml(pred?.predictedWinnerName || "Calculating")}</strong>
           • Projected:
           <strong>${escapeHtml(predictedScore(game, pred))}</strong>
@@ -2299,8 +2388,8 @@ function renderResults() {
         <h3>${escapeHtml(pred.awayTeamName)} @ ${escapeHtml(pred.homeTeamName)}</h3>
         <p>
           Date: ${escapeHtml(prettyDate(pred.date))}
-          • Result: <strong class="goldText">${escapeHtml(pred.predictedWinnerName)}</strong>
-          • Calibrated Confidence: <strong>${escapeHtml(confidence)}%</strong>
+          • Prediction: <strong class="goldText">${escapeHtml(pred.predictedWinnerName)}</strong>
+          • Confidence: <strong>${escapeHtml(confidence)}%</strong>
         </p>
 
         <p>
@@ -2382,6 +2471,8 @@ if (syncBtn) {
 }
 
 setupTabs();
+setupSubTabs();
+setupViewMode();
 setupBestFilters();
 setupInstallButton();
 renderRefreshStatus();
